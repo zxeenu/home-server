@@ -24,6 +24,7 @@ The important architectural feature is that Minecraft has **two Tailscale access
 
 # 0. Quick Look
 
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    USER ACCESS PATHS                        │
 ├─────────────────────────────────────────────────────────────┤
@@ -45,6 +46,7 @@ The important architectural feature is that Minecraft has **two Tailscale access
 │  │  └────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
+```
 
 ---
 
