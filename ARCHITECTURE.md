@@ -22,6 +22,32 @@ The important architectural feature is that Minecraft has **two Tailscale access
 
 ---
 
+# 0. Quick Look
+
+┌─────────────────────────────────────────────────────────────┐
+│                    USER ACCESS PATHS                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  LOCAL LAN          MAIN TAILSCALE      MINECRAFT TAILSCALE │
+│  ┌─────────┐        ┌──────────┐        ┌──────────────┐   │
+│  │ Browser │        │ Remote   │        │ Remote       │   │
+│  │         │        │ Device   │        │ Player       │   │
+│  └────┬────┘        └────┬─────┘        └──────┬───────┘   │
+│       │                  │                      │           │
+│       ▼                  ▼                      ▼           │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │               HOME SERVER (Ubuntu)                   │  │
+│  │  ┌────────────────────────────────────────────────┐  │  │
+│  │  │              DOCKER COMPOSE                   │  │  │
+│  │  │  Pi-hole → NPM → Services (Plex, etc.)       │  │  │
+│  │  │  Main Tailscale → LAN subnet advertise        │  │  │
+│  │  │  Minecraft + Tailscale sidecar (100.72.36.23)│  │  │
+│  │  └────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+---
+
 # 1. High-Level Network
 
 ```text
@@ -1185,3 +1211,39 @@ The result is a home-server environment where:
 * **Minecraft remains reachable through the main Tailscale LAN route as well.**
 * **LAN access continues to work normally.**
 * **The sidecar pattern can be reused for other applications when dedicated network access is useful.**
+
+## 22. Important Security Consideration: UPnP
+
+This architecture assumes **zero open inbound ports** on the home router. 
+All remote access is through Tailscale.
+
+**Critical:** Ensure Universal Plug and Play (UPnP) is **disabled** on your router.
+Services like Plex can automatically use UPnP to open firewall ports without your 
+knowledge, bypassing the security model.
+
+To verify:
+1. Log into your router's admin panel.
+2. Find the UPnP settings and disable them.
+3. Check for existing mappings (e.g., Plex may have opened a port).
+4. After disabling, refresh to confirm all mappings are removed.
+
+With UPnP off and no port forwards, your server is invisible to the public internet.
+
+## 23. Common Architectural Pitfalls
+
+### DNS Propagation
+- Pi-hole local records take effect immediately.
+- If a service isn't reachable via domain, check Pi-hole's local DNS table first.
+
+### Docker Network Isolation
+- Services on `home-server-net` can communicate via container names.
+- If a service can't reach another, verify they're on the same Docker network.
+
+### Tailscale Connectivity
+- Both Tailscale nodes must be authenticated with valid auth keys.
+- The Minecraft sidecar shares the Minecraft container's network—verify both are running.
+
+
+---
+**Document Version:** 1.0  
+**Last Updated:** 25 August 2026
