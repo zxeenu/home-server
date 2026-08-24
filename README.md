@@ -568,18 +568,27 @@ http://home-server.YOUR-TAILNET:32400/web
 
 ## ⚠️ Important Security Note: Disable UPnP on Your Router
 
-This setup is designed with a **zero open ports** philosophy. All external access is securely handled through Tailscale, meaning your server is completely invisible to the public internet.
+This setup is designed with a zero open ports philosophy. All external access is securely handled through Tailscale, meaning your server is completely invisible to the public internet.
 
-**However, there is one common trap to watch out for:**
+However, there is one common trap to watch out for:
 
-Services like **Plex** can automatically use Universal Plug and Play (UPnP) to request your router to open inbound ports without your knowledge. If UPnP is enabled on your router, Plex (and other services) may silently expose your server to the internet, breaking the security model of this setup.
+Services like Plex can automatically use Universal Plug and Play (UPnP) to request your router to open inbound ports without your knowledge. If UPnP is enabled on your router, Plex (and other services) may silently expose your server to the internet, breaking the security model of this setup.
 
-**How to verify and fix this:**
+How to verify and fix this:
 
-1.  **Disable UPnP**: Log into your router's administration panel and find the UPnP settings. Uncheck the box to disable it entirely and apply the changes.
-2.  **Check for existing mappings**: Before disabling it, review the active UPnP table. You might see something like this:
-    ```text
-    | Plex Media Server | 14772 | 32400 | TCP | 192.168.100.65 | Enable |
+1. Disable UPnP: Log into your router's administration panel and find the UPnP settings. Uncheck the box to disable it entirely and apply the changes.
+
+2. Check for existing mappings: Before disabling it, review the active UPnP table. You might see something like this:
+
+   | Plex Media Server | 14772 | 32400 | TCP | 192.168.100.65 | Enable |
+
+3. Verify it's gone: After disabling UPnP, refresh the table to ensure all port mappings have been removed.
+
+Why this matters:
+
+By disabling UPnP, you ensure that no service can automatically open your firewall. Combined with zero manual port forwards and Tailscale's secure WireGuard tunnel, your home server remains safely locked down—accessible only to you and your authorized devices.
+
+Note: With UPnP disabled and no open ports, Plex will still work perfectly fine over your local network, and you can securely access it remotely via your Tailscale IP (e.g., http://100.x.x.x:32400).
 
 ## License
 
