@@ -1,0 +1,20 @@
+# Secrets - never commit your actual environment file
+.env
+
+# Container data (bind-mounted volumes, if ever created inside this repo folder)
+appdata/
+media/
+
+# Temp data created by scripts
+homelab-cert/
+config/
+/index.html
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp

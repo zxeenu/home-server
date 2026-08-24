@@ -1,0 +1,295 @@
+# ---------------------------------------------------------------------------
+# HOME SERVER STACK
+# Services: Homepage (static dashboard of links), Nginx Proxy Manager (reverse
+#           proxy), Portainer (docker mgmt UI), Pi-hole (DNS + ad-block),
+#           Plex, qBittorrent, Stirling PDF (PDF toolkit), Calibre-Web
+#           (ebook library/reader), ntfy (push notifications), Samba
+#           (network file browsing)
+#           Sonarr / Radarr / Prowlarr are included but commented out below -
+#           uncomment them later if you want automated TV/movie fetching.
+#
+# IMAGE PINNING:
+#   All currently-running images are pinned to their exact image digest.
+#   This prevents `latest` from silently changing what gets deployed.
+#
+#   To intentionally update an image:
+#       docker compose pull
+#       docker compose up -d
+#
+#   Then inspect the new digest and update this file deliberately.
+#
+# BEFORE YOU START:
+#   1. Create the folder structure on your host, e.g.:
+#        /srv/appdata/{npm,portainer,pihole,plex,qbittorrent,stirlingpdf,calibreweb,ntfy}
+#        /srv/media/{movies,tv,downloads,books}
+#   2. Keep index.html in the SAME folder as this docker-compose.yml
+#      (the homepage service mounts it directly from there - no copying needed).
+#   3. Local DNS records for Pi-hole (home.${DOMAIN_NAME}, plex.${DOMAIN_NAME}, etc.) are set
+#      via the FTLCONF_dns_hosts environment variable below, using SERVER_IP
+#      from .env - no separate file needed (Pi-hole v6 no longer reads
+#      custom.list).
+#   4. Edit the .env file with your paths, timezone, and passwords.
+#   5. Run: docker compose up -d
+#   6. In Nginx Proxy Manager (http://<server-ip>:81), add a Proxy Host for
+#      each domain, pointing to the matching container name and its internal
+#      port (e.g. plex.home.lan -> plex:32400, home.lan -> homepage:80).
+#   7. In Pi-hole, set your router's DNS (or each device's DNS) to the
+#      server's IP so *.home.lan resolves for every device on the network.
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ---------------- Home dashboard (static landing page linking to all services) ----------------
+  # Currently running: nginx:alpine
+  # Pinned to the exact image currently installed on the server.
+  homepage:
+    image: nginx@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
+    container_name: homepage
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+    ports:
+      - "8888:80"    # kept as direct fallback; proxied as home.lan too
+    restart: unless-stopped
+
+  # ---------------- Reverse proxy (routes domain names -> correct container:port) ----------------
+  nginxproxymanager:
+    image: jc21/nginx-proxy-manager@sha256:52b2c59994f3d36acfcf70a1626f29734df0ed8c71bacc0269f78b6f939858bb
+    container_name: nginxproxymanager
+    ports:
+      - "80:80"      # HTTP - all your custom domains come through here
+      - "443:443"    # HTTPS
+      - "81:81"      # NPM admin UI -> http://<server-ip>:81
+    volumes:
+      - ${APPDATA}/npm/data:/data
+      - ${APPDATA}/npm/letsencrypt:/etc/letsencrypt
+    restart: unless-stopped
+
+  # ---------------- Docker management UI ----------------
+  portainer:
+    image: portainer/portainer-ce@sha256:3fa8750ac2b98ce56784ca292df1adc3ec38f0062fd572811ea4b2221beee310
+    container_name: portainer
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${APPDATA}/portainer:/data
+    ports:
+      - "9000:9000"    # kept as direct fallback; proxied as portainer.home.lan too
+    restart: unless-stopped
+
+  # ---------------- DNS / ad-blocking ----------------
+  pihole:
+    image: pihole/pihole@sha256:f7d1be836e3bc608b56d82fc9904f5a831cdfbc0dc9c6d58f94e4c985c70038b
+    container_name: pihole
+    hostname: pihole
+    environment:
+      TZ: ${TZ}
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      FTLCONF_dns_listeningMode: all
+      FTLCONF_dns_hosts: |
+        ${SERVER_IP} home.${DOMAIN_NAME}
+        ${SERVER_IP} proxy.${DOMAIN_NAME}
+        ${SERVER_IP} portainer.${DOMAIN_NAME}
+        ${SERVER_IP} pihole.${DOMAIN_NAME}
+        ${SERVER_IP} plex.${DOMAIN_NAME}
+        ${SERVER_IP} torrent.${DOMAIN_NAME}
+        ${SERVER_IP} files.${DOMAIN_NAME}
+        ${SERVER_IP} pdf.${DOMAIN_NAME}
+        ${SERVER_IP} books.${DOMAIN_NAME}
+        ${SERVER_IP} ntfy.${DOMAIN_NAME}
+        ${SERVER_IP} minecraft.${DOMAIN_NAME}
+    volumes:
+      - ${APPDATA}/pihole/etc-pihole:/etc/pihole
+      - ${APPDATA}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8081:80/tcp"   # Pi-hole web UI -> http://<server-ip>:8081/admin (kept as fallback)
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+
+  # ---------------- Media server ----------------
+  # Currently running:
+  #   Plex 1.43.3.10896-cb3ebc72d-ls321
+  plex:
+    image: lscr.io/linuxserver/plex@sha256:f6c58cb2f5e41cd1397bf2ed4e61ef63bd86e0736841b3ef426fabfe04606293
+    container_name: plex
+    network_mode: host   # simplest for Plex discovery/DLNA; remove if you'd rather bridge+ports
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      VERSION: docker
+    volumes:
+      - ${APPDATA}/plex:/config
+      - ${MEDIA}/movies:/movies
+      - ${MEDIA}/tv:/tv
+      - ${MEDIA}/downloads:/downloads
+    restart: unless-stopped
+    # devices:
+    #   - /dev/dri:/dev/dri   # uncomment for Intel Quick Sync hardware transcoding
+
+  # ---------------- Torrent client ----------------
+  # Currently running:
+  #   qBittorrent 5.2.3_v2.0.14-ls472
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent@sha256:212b86dff59e3962b4082b5ef20a577e76c8f8527d2ab505cfa887b4bcecb0b0
+    container_name: qbittorrent
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      WEBUI_PORT: 8080
+    volumes:
+      - ${APPDATA}/qbittorrent:/config
+      - ${MEDIA}/downloads:/downloads
+      - ${MEDIA}/other:/other
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    restart: unless-stopped
+
+  # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
+  stirlingpdf:
+    image: stirlingtools/stirling-pdf@sha256:3b3670fce70b396ec56ba380a3cc7858e0abf83fe13f31c88f7737847763a396
+    container_name: stirlingpdf
+    environment:
+      TZ: ${TZ}
+      DOCKER_ENABLE_SECURITY: "false"   # set true and configure login if exposing beyond LAN
+    volumes:
+      - ${APPDATA}/stirlingpdf/trainingData:/usr/share/tessdata   # OCR language data
+      - ${APPDATA}/stirlingpdf/config:/configs
+      - ${APPDATA}/stirlingpdf/logs:/logs
+    ports:
+      - "8082:8080"    # Stirling PDF web UI -> http://<server-ip>:8082 (kept as fallback)
+    restart: unless-stopped
+
+  # ---------------- Ebook library & web reader (point it at a Calibre library folder) ----------------
+  # Currently running:
+  #   Calibre-Web 0.6.27-ls397
+  calibreweb:
+    image: lscr.io/linuxserver/calibre-web@sha256:70f7dcade3e4d07f7e7cb10c6ee3290a4b5496b7cd0c6a27cde97c4c2bb4e2bf
+    container_name: calibreweb
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+      DOCKER_MODS: linuxserver/mods:universal-calibre   # adds ebook-convert tools; remove if not needed
+    volumes:
+      - ${APPDATA}/calibreweb:/config
+      - ${MEDIA}/books:/books
+    ports:
+      - "8083:8083"    # Calibre-Web UI -> http://<server-ip>:8083 (kept as fallback)
+    restart: unless-stopped
+
+  # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
+  ntfy:
+    image: binwiederhier/ntfy@sha256:f2419f405127afa868f10985c1a41449e673477cee1eb19994339a5ae8b592e7
+    container_name: ntfy
+    command:
+      - serve
+    environment:
+      TZ: ${TZ}
+      NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
+      NTFY_BEHIND_PROXY: true
+      NTFY_ENABLE_LOGIN: "false"
+      NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+    volumes:
+      - ${APPDATA}/ntfy/cache:/var/cache/ntfy
+      - ${APPDATA}/ntfy/etc:/etc/ntfy
+    ports:
+      - "8084:80"    # ntfy web UI / API -> http://<server-ip>:8084 (kept as fallback)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ---------------- Indexer manager (disabled - uncomment to enable automation) ----------------
+  # If you enable this, also add "${SERVER_IP} prowlarr.home.lan" to FTLCONF_dns_hosts above.
+  # prowlarr:
+  #   image: lscr.io/linuxserver/prowlarr:latest
+  #   container_name: prowlarr
+  #   environment:
+  #     PUID: ${PUID}
+  #     PGID: ${PGID}
+  #     TZ: ${TZ}
+  #   volumes:
+  #     - ${APPDATA}/prowlarr:/config
+  #   ports:
+  #     - "9696:9696"
+  #   restart: unless-stopped
+
+  # ---------------- TV automation (disabled - uncomment to enable automation) ----------------
+  # If you enable this, also add "${SERVER_IP} sonarr.home.lan" to FTLCONF_dns_hosts above.
+  # sonarr:
+  #   image: lscr.io/linuxserver/sonarr:latest
+  #   container_name: sonarr
+  #   environment:
+  #     PUID: ${PUID}
+  #     PGID: ${PGID}
+  #     TZ: ${TZ}
+  #   volumes:
+  #     - ${APPDATA}/sonarr:/config
+  #     - ${MEDIA}/tv:/tv
+  #     - ${MEDIA}/downloads:/downloads
+  #   ports:
+  #     - "8989:8989"
+  #   restart: unless-stopped
+
+  # ---------------- Movie automation (disabled - uncomment to enable automation) ----------------
+  # If you enable this, also add "${SERVER_IP} radarr.home.lan" to FTLCONF_dns_hosts above.
+  # radarr:
+  #   image: lscr.io/linuxserver/radarr:latest
+  #   container_name: radarr
+  #   environment:
+  #     PUID: ${PUID}
+  #     PGID: ${PGID}
+  #     TZ: ${TZ}
+  #   volumes:
+  #     - ${APPDATA}/radarr:/config
+  #     - ${MEDIA}/movies:/movies
+  #     - ${MEDIA}/downloads:/downloads
+  #   ports:
+  #     - "7878:7878"
+  #   restart: unless-stopped
+
+  # ---------------- Network file share (browse & clean up media over LAN) ----------------
+  samba:
+    image: dperson/samba@sha256:66088b78a19810dd1457a8f39340e95e663c728083efa5fe7dc0d40b2478e869
+    container_name: samba
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ${MEDIA}:/media
+    ports:
+      - "139:139"
+      - "445:445"
+    command: >
+      -u "${SMB_USER};${SMB_PASSWORD}"
+      -s "media;/media;yes;no;no;${SMB_USER}"
+    restart: unless-stopped
+
+  # ---------------- Tailscale (remote access via WireGuard mesh VPN) ----------------
+  tailscale:
+    image: tailscale/tailscale@sha256:8c42c4574ab066384fcb72f69e086a2ff1dd3652eb6f56856cee34bcf0d2f680
+    container_name: tailscale
+    hostname: home-server
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}          # generate at https://login.tailscale.com/admin/settings/keys
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_EXTRA_ARGS: --advertise-routes=${LAN_SUBNET} --accept-dns=false
+      # add --advertise-exit-node too if you also want to route ALL internet traffic through home
+    volumes:
+      - ${APPDATA}/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+
+networks:
+  default:
+    name: home-server-net
