@@ -167,6 +167,7 @@ services:
   # ---------------- Ebook library & web reader (point it at a Calibre library folder) ----------------
   # Currently running:
   #   Calibre-Web 0.6.27-ls397
+  #   Known bug fix: after server setup. run docker exec calibreweb chmod +x /usr/bin/kepubify. ./calibreweb-init:/custom-cont-init.d:ro is the automatic fix. 
   calibreweb:
     image: lscr.io/linuxserver/calibre-web@sha256:70f7dcade3e4d07f7e7cb10c6ee3290a4b5496b7cd0c6a27cde97c4c2bb4e2bf
     container_name: calibreweb
@@ -178,8 +179,7 @@ services:
     volumes:
       - ${APPDATA}/calibreweb:/config
       - ${MEDIA}/books:/books
-    command: >
-      sh -c 'chmod +x /usr/bin/kepubify && exec /init'
+      - ./calibreweb-init:/custom-cont-init.d:ro
     ports:
       - "8083:8083"    # Calibre-Web UI -> http://<server-ip>:8083 (kept as fallback)
     restart: unless-stopped
