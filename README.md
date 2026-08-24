@@ -566,6 +566,21 @@ http://home-server.YOUR-TAILNET:32400/web
 - **Minecraft:** Allocate more RAM in `.env` (`MC_MEMORY`) if you have many players
 - **Network:** Use 5GHz WiFi or Ethernet for media server connection (reduces buffering)
 
+## ⚠️ Important Security Note: Disable UPnP on Your Router
+
+This setup is designed with a **zero open ports** philosophy. All external access is securely handled through Tailscale, meaning your server is completely invisible to the public internet.
+
+**However, there is one common trap to watch out for:**
+
+Services like **Plex** can automatically use Universal Plug and Play (UPnP) to request your router to open inbound ports without your knowledge. If UPnP is enabled on your router, Plex (and other services) may silently expose your server to the internet, breaking the security model of this setup.
+
+**How to verify and fix this:**
+
+1.  **Disable UPnP**: Log into your router's administration panel and find the UPnP settings. Uncheck the box to disable it entirely and apply the changes.
+2.  **Check for existing mappings**: Before disabling it, review the active UPnP table. You might see something like this:
+    ```text
+    | Plex Media Server | 14772 | 32400 | TCP | 192.168.100.65 | Enable |
+
 ## License
 
 MIT — do whatever you want with this setup.
