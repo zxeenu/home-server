@@ -178,6 +178,8 @@ services:
     volumes:
       - ${APPDATA}/calibreweb:/config
       - ${MEDIA}/books:/books
+    command: >
+      sh -c 'chmod +x /usr/bin/kepubify && exec /init'
     ports:
       - "8083:8083"    # Calibre-Web UI -> http://<server-ip>:8083 (kept as fallback)
     restart: unless-stopped

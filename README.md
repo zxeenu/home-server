@@ -392,6 +392,10 @@ sudo chown -R 1000:1000 /srv/media/books
 sudo chmod -R 755 /srv/media/books
 ```
 
+```bash
+docker exec calibreweb chmod +x /usr/bin/kepubify
+```
+
 ### Tailscale connection issues
 
 ```bash
