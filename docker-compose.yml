@@ -174,7 +174,7 @@ services:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
-      DOCKER_MODS: linuxserver/mods:universal-calibre   # adds ebook-convert tools; remove if not needed
+      DOCKER_MODS: linuxserver/mods:universal-calibre|linuxserver/mods:universal-kepubify   # adds ebook-convert tools; remove if not needed
     volumes:
       - ${APPDATA}/calibreweb:/config
       - ${MEDIA}/books:/books
