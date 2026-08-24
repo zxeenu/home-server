@@ -166,10 +166,10 @@ services:
 
   # ---------------- Ebook library & web reader (point it at a Calibre library folder) ----------------
   # Currently running:
-  #   Calibre-Web 0.6.27-ls397
-  #   Known bug fix: after server setup. The post_start
+  #   Calibre-Web e1f04638-ls370 | 2026-08-23
+  #   Changing to nightly because of errors on prod
   calibreweb:
-    image: lscr.io/linuxserver/calibre-web@sha256:70f7dcade3e4d07f7e7cb10c6ee3290a4b5496b7cd0c6a27cde97c4c2bb4e2bf
+    image: lscr.io/linuxserver/calibre-web@sha256:53b476347b20b9fcfe11b57416160a131d0b52c408b1623997cddf1df78f19db
     container_name: calibreweb
     environment:
       PUID: ${PUID}
