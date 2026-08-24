@@ -146,7 +146,7 @@ ntfy.eggbase.net       → SERVER_IP
 minecraft.eggbase.net  → SERVER_IP
 ```
 
-The important point is that DNS does **not** directly select the Docker container.
+The important point is that DNS does **not** directly select the Docker container. Except in the case of Plex, Nfty and Calibre - which are exposed via IP. 
 
 It simply sends the hostname to the server.
 
@@ -957,7 +957,7 @@ The intended service access pattern is:
 | `pihole.eggbase.net`    | Pi-hole                  |
 | `plex.eggbase.net`      | Plex                     |
 | `torrent.eggbase.net`   | qBittorrent              |
-| `files.eggbase.net`     | Samba / file access      |
+| `files.eggbase.net`     | Samba / file access (SMB)|
 | `pdf.eggbase.net`       | Stirling PDF             |
 | `books.eggbase.net`     | Calibre-Web              |
 | `ntfy.eggbase.net`      | ntfy                     |
@@ -966,6 +966,7 @@ The intended service access pattern is:
 Pi-hole resolves these domains to the server IP.
 
 Nginx Proxy Manager then routes HTTP/HTTPS requests to the appropriate service.
+SMB traffic is not proxied by NPM; clients connect directly via SMB protocol.
 
 ---
 
