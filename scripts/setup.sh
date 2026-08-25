@@ -53,7 +53,8 @@ mkdir -p \
   "$APPDATA/minecraft" \
   "$APPDATA/tailscale" \
   "$APPDATA/minecraft-tailscale" \
-  "${APPDATA}/other"
+  "$APPDATA/other" \
+  "$APPDATA/calibreweb/ingest"
 
 echo "Creating media folders under $MEDIA ..."
 mkdir -p \

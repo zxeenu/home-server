@@ -164,25 +164,22 @@ services:
       - "8082:8080"    # Stirling PDF web UI -> http://<server-ip>:8082 (kept as fallback)
     restart: unless-stopped
 
-  # ---------------- Ebook library & web reader (point it at a Calibre library folder) ----------------
-  # Currently running:
-  #   Calibre-Web e1f04638-ls370 | 2026-08-23
-  #   Changing to nightly because of errors on prod
+  # ---------------- Ebook library & web reader ----------------
+  # Calibre-Web NextGen
+  # Pinned to exact image digest.
   calibreweb:
-    image: lscr.io/linuxserver/calibre-web@sha256:53b476347b20b9fcfe11b57416160a131d0b52c408b1623997cddf1df78f19db
+    image: ghcr.io/new-usemame/calibre-web-nextgen@sha256:9ac36a23138e2c84fa48bd9f9e13c8ce1128f53764408ac57e15226628545f87
     container_name: calibreweb
     environment:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
-      DOCKER_MODS: linuxserver/mods:universal-calibre   # adds ebook-convert tools; remove if not needed
     volumes:
       - ${APPDATA}/calibreweb:/config
-      - ${MEDIA}/books:/books
-    post_start:
-    - command: chmod +x /usr/bin/kepubify
+      - ${MEDIA}/books:/calibre-library
+      - ${APPDATA}/calibreweb/ingest:/cwa-book-ingest
     ports:
-      - "8083:8083"    # Calibre-Web UI -> http://<server-ip>:8083 (kept as fallback)
+      - "8083:8083"
     restart: unless-stopped
 
   # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
