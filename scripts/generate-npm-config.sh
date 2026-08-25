@@ -96,7 +96,7 @@ jq -n \
     {
       name: "books",
       domain_names: ["books." + $domain],
-      forward_host: calibreweb,
+      forward_host: "calibreweb",
       forward_port: 8083,
       access_list_id: 0,
       certificate_name: "HOME NETWORK CERT",
