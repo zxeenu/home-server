@@ -177,7 +177,7 @@ services:
     volumes:
       - ${APPDATA}/calibreweb:/config
       - ${MEDIA}/books:/calibre-library
-      - ${APPDATA}/calibreweb/ingest:/cwa-book-ingest
+      - ${MEDIA}/calibreweb-ingest:/cwa-book-ingest
     ports:
       - "8083:8083"
     restart: unless-stopped

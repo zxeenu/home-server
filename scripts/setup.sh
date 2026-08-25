@@ -53,15 +53,15 @@ mkdir -p \
   "$APPDATA/minecraft" \
   "$APPDATA/tailscale" \
   "$APPDATA/minecraft-tailscale" \
-  "$APPDATA/other" \
-  "$APPDATA/calibreweb/ingest"
+  "$APPDATA/other" 
 
 echo "Creating media folders under $MEDIA ..."
 mkdir -p \
   "$MEDIA/movies" \
   "$MEDIA/tv" \
   "$MEDIA/downloads" \
-  "$MEDIA/books"
+  "$MEDIA/books" \
+  "$MEDIA/calibreweb-ingest"
 
 # .env from example, only if it doesn't already exist
 if [ -f "$ENV_DIR/.env.example" ] && [ ! -f "$ENV_DIR/.env" ]; then
