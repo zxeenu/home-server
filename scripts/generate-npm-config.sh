@@ -103,7 +103,7 @@ jq -n \
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
-      advanced_config: "proxy_buffer_size 128k;\nproxy_buffers 4 256k;\nproxy_busy_buffers_size 256k;",
+      advanced_config: "proxy_buffer_size 2m;\nproxy_buffers 8 2m;\nproxy_busy_buffers_size 4m;",
       allow_websocket_upgrade: true,
       http2_support: false,
       forward_scheme: "http",
