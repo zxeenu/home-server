@@ -9,9 +9,8 @@ set -euo pipefail
 # Behaviour:
 #
 #   Certificate:
-#     - Find by nice_name.
-#     - Create if missing.
-#     - Upload current acme.sh certificate/key.
+#     - Looks up existing certificate by nice_name (must already exist).
+#     - Does NOT create or upload certificates.
 #
 #   Proxy hosts:
 #     - Find by domain.
@@ -133,27 +132,6 @@ for command in curl jq; do
 done
 
 # ---------------------------------------------------------------------------
-# acme.sh certificate
-# ---------------------------------------------------------------------------
-
-CERT_DIR="${HOME}/.acme.sh/${DOMAIN_NAME}_ecc"
-
-CERT_FILE="${CERT_DIR}/fullchain.cer"
-KEY_FILE="${CERT_DIR}/${DOMAIN_NAME}.key"
-
-if [[ ! -f "${CERT_FILE}" ]]; then
-    echo "${LOG_TAG} ERROR: Certificate not found:"
-    echo "${LOG_TAG} ${CERT_FILE}"
-    exit 1
-fi
-
-if [[ ! -f "${KEY_FILE}" ]]; then
-    echo "${LOG_TAG} ERROR: Certificate key not found:"
-    echo "${LOG_TAG} ${KEY_FILE}"
-    exit 1
-fi
-
-# ---------------------------------------------------------------------------
 # NPM hosts
 # ---------------------------------------------------------------------------
 
@@ -259,12 +237,11 @@ npm_put() {
 }
 
 # ---------------------------------------------------------------------------
-# Certificate helpers
+# Certificate lookup
 # ---------------------------------------------------------------------------
 
-get_certificate_id() {
+get_certificate_id_by_name() {
     local nice_name="$1"
-
     npm_get "/api/nginx/certificates" |
         jq -r \
             --arg name "${nice_name}" \
@@ -276,108 +253,21 @@ get_certificate_id() {
         head -n1
 }
 
-create_certificate() {
-    local nice_name="$1"
-
-    curl -fsS \
-        --connect-timeout 5 \
-        --max-time 30 \
-        -X POST \
-        "http://${NPM_BASE_URL}/api/nginx/certificates" \
-        -H "Authorization: Bearer ${NPM_TOKEN}" \
-        -F "provider=other" \
-        -F "nice_name=${nice_name}" |
-        jq -r '.id // empty'
-}
-
-upload_certificate() {
-    local certificate_id="$1"
-
-    echo "${LOG_TAG} Uploading certificate to ID ${certificate_id}..."
-
-    curl -fsS \
-        --connect-timeout 5 \
-        --max-time 30 \
-        -X POST \
-        "http://${NPM_BASE_URL}/api/nginx/certificates/${certificate_id}/upload" \
-        -H "Authorization: Bearer ${NPM_TOKEN}" \
-        -F "certificate=@${CERT_FILE}" \
-        -F "certificate_key=@${KEY_FILE}" \
-        >/dev/null
-
-    echo "${LOG_TAG} Certificate uploaded successfully."
-}
-
-# ---------------------------------------------------------------------------
-# Certificate import
-# ---------------------------------------------------------------------------
-
-declare -A CERTIFICATE_IDS
-
-CERT_COUNT="$(jq '.certificates // [] | length' "${CONFIG_FILE}")"
+# The exact nice_name of the Let's Encrypt certificate in NPM
+CERT_NICE_NAME="${DOMAIN_NAME}, *.${DOMAIN_NAME}"
 
 echo
-echo "${LOG_TAG} ==============================================="
-echo "${LOG_TAG} Certificates"
-echo "${LOG_TAG} ==============================================="
+echo "${LOG_TAG} Looking up certificate: ${CERT_NICE_NAME}"
 
-for ((i = 0; i < CERT_COUNT; i++)); do
+CERT_ID="$(get_certificate_id_by_name "${CERT_NICE_NAME}")"
 
-    CERT_NAME="$(
-        jq -r ".certificates[${i}].name" "${CONFIG_FILE}"
-    )"
+if [[ -z "${CERT_ID}" ]]; then
+    echo "${LOG_TAG} ERROR: Certificate '${CERT_NICE_NAME}' was not found in NPM."
+    echo "${LOG_TAG} Please create it via the NPM UI (Let's Encrypt with DNS challenge) first."
+    exit 1
+fi
 
-    echo
-    echo "${LOG_TAG} Certificate: ${CERT_NAME}"
-
-    CERT_ID="$(get_certificate_id "${CERT_NAME}")"
-
-    if [[ -n "${CERT_ID}" ]]; then
-
-        echo "${LOG_TAG} Existing certificate found: ID ${CERT_ID}"
-
-    else
-
-        echo "${LOG_TAG} Certificate does not exist."
-        echo "${LOG_TAG} Creating..."
-
-        CERT_ID="$(create_certificate "${CERT_NAME}")"
-
-        if [[ -z "${CERT_ID}" ]]; then
-            echo "${LOG_TAG} ERROR: Failed to create certificate."
-            exit 1
-        fi
-
-        echo "${LOG_TAG} Created certificate: ID ${CERT_ID}"
-
-    fi
-
-    upload_certificate "${CERT_ID}"
-
-    CERTIFICATE_IDS["${CERT_NAME}"]="${CERT_ID}"
-
-done
-
-# ---------------------------------------------------------------------------
-# Proxy host helpers
-# ---------------------------------------------------------------------------
-
-get_proxy_host_id() {
-    local domain="$1"
-
-    npm_get "/api/nginx/proxy-hosts" |
-        jq -r \
-            --arg domain "${domain}" \
-            '
-            .[]
-            | select(
-                (.domain_names // [])
-                | index($domain)
-            )
-            | .id
-            ' |
-        head -n1
-}
+echo "${LOG_TAG} Found certificate ID: ${CERT_ID}"
 
 # ---------------------------------------------------------------------------
 # Proxy hosts
@@ -396,35 +286,10 @@ for ((i = 0; i < PROXY_COUNT; i++)); do
         jq -r ".proxy_hosts[${i}].domain_names[0]" "${CONFIG_FILE}"
     )"
 
-    CERT_NAME="$(
-        jq -r ".proxy_hosts[${i}].certificate_name" "${CONFIG_FILE}"
-    )"
-
     echo
     echo "${LOG_TAG} ${DOMAIN}"
 
-    # ---------------------------------------------------------------
-    # Resolve certificate
-    # ---------------------------------------------------------------
-
-    CERT_ID="${CERTIFICATE_IDS[${CERT_NAME}]:-}"
-
-    if [[ -z "${CERT_ID}" ]]; then
-        echo "${LOG_TAG} ERROR: Certificate '${CERT_NAME}' was not imported."
-        exit 1
-    fi
-
-    # ---------------------------------------------------------------
-    # Build NPM API payload
-    #
-    # Remove our declarative-only fields:
-    #
-    #   name
-    #   certificate_name
-    #
-    # Then replace certificate_name with the actual NPM ID.
-    # ---------------------------------------------------------------
-
+    # Build NPM API payload: remove certificate_name, set certificate_id
     HOST_JSON="$(
         jq \
             --argjson index "${i}" \
@@ -432,46 +297,39 @@ for ((i = 0; i < PROXY_COUNT; i++)); do
             '
             .proxy_hosts[$index]
             |
-            del(
-                .name,
-                .certificate_name
-            )
+            del(.certificate_name)
             |
             .certificate_id = ($cert_id | tonumber)
             ' \
             "${CONFIG_FILE}"
     )"
 
-    # ---------------------------------------------------------------
-    # Find existing host
-    # ---------------------------------------------------------------
-
-    HOST_ID="$(get_proxy_host_id "${DOMAIN}")"
+    # Find existing host by domain
+    HOST_ID="$(
+        npm_get "/api/nginx/proxy-hosts" |
+        jq -r \
+            --arg domain "${DOMAIN}" \
+            '
+            .[]
+            | select(
+                (.domain_names // [])
+                | index($domain)
+            )
+            | .id
+            ' |
+        head -n1
+    )"
 
     if [[ -n "${HOST_ID}" ]]; then
-
         echo "${LOG_TAG} Existing host found: ID ${HOST_ID}"
         echo "${LOG_TAG} Updating..."
-
-        npm_put \
-            "/api/nginx/proxy-hosts/${HOST_ID}" \
-            "${HOST_JSON}" \
-            >/dev/null
-
+        npm_put "/api/nginx/proxy-hosts/${HOST_ID}" "${HOST_JSON}" >/dev/null
         echo "${LOG_TAG} ${DOMAIN}: updated successfully."
-
     else
-
         echo "${LOG_TAG} Host does not exist."
         echo "${LOG_TAG} Creating..."
-
-        npm_post \
-            "/api/nginx/proxy-hosts" \
-            "${HOST_JSON}" \
-            >/dev/null
-
+        npm_post "/api/nginx/proxy-hosts" "${HOST_JSON}" >/dev/null
         echo "${LOG_TAG} ${DOMAIN}: created successfully."
-
     fi
 
 done
@@ -488,9 +346,9 @@ echo
 echo "${LOG_TAG} Domain: ${DOMAIN_NAME}"
 echo "${LOG_TAG} IP:     ${IP_ADDRESS}"
 echo "${LOG_TAG} NPM:    ${NPM_BASE_URL}"
+echo "${LOG_TAG} Certificate: ${CERT_NICE_NAME} (ID ${CERT_ID})"
 echo
-echo "${LOG_TAG} Certificates processed: ${CERT_COUNT}"
-echo "${LOG_TAG} Proxy hosts processed:  ${PROXY_COUNT}"
+echo "${LOG_TAG} Proxy hosts processed: ${PROXY_COUNT}"
 echo
 echo "${LOG_TAG} Existing objects were updated."
 echo "${LOG_TAG} Missing objects were created."

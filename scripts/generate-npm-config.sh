@@ -76,6 +76,9 @@ echo "${LOG_TAG} IP_ADDRESS=${IP_ADDRESS}"
 echo "${LOG_TAG} Generating:"
 echo "${LOG_TAG} ${OUTPUT_FILE}"
 
+# The exact nice_name of the Let's Encrypt certificate in NPM
+CERT_NICE_NAME="${DOMAIN_NAME}, *.${DOMAIN_NAME}"
+
 # ---------------------------------------------------------------------------
 # Generate JSON
 # ---------------------------------------------------------------------------
@@ -83,6 +86,7 @@ echo "${LOG_TAG} ${OUTPUT_FILE}"
 jq -n \
     --arg domain "${DOMAIN_NAME}" \
     --arg ip "${IP_ADDRESS}" \
+    --arg cert_name "${CERT_NICE_NAME}" \
 '
 {
   version: 1,
@@ -99,7 +103,7 @@ jq -n \
       forward_host: "calibreweb",
       forward_port: 8083,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -120,7 +124,7 @@ jq -n \
       forward_host: "homepage",
       forward_port: 80,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -141,7 +145,7 @@ jq -n \
       forward_host: $ip,
       forward_port: 8084,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -162,7 +166,7 @@ jq -n \
       forward_host: "stirlingpdf",
       forward_port: 8080,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -183,7 +187,7 @@ jq -n \
       forward_host: "pihole",
       forward_port: 80,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -204,7 +208,7 @@ jq -n \
       forward_host: $ip,
       forward_port: 32400,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -225,7 +229,7 @@ jq -n \
       forward_host: "portainer",
       forward_port: 9000,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -246,7 +250,7 @@ jq -n \
       forward_host: "nginxproxymanager",
       forward_port: 81,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -267,7 +271,7 @@ jq -n \
       forward_host: "qbittorrent",
       forward_port: 8080,
       access_list_id: 0,
-      certificate_name: "HOME NETWORK CERT",
+      certificate_name: $cert_name,
       ssl_forced: true,
       caching_enabled: false,
       block_exploits: false,
@@ -287,14 +291,7 @@ jq -n \
   dead_hosts: [],
   streams: [],
   access_lists: [],
-
-  certificates: [
-    {
-      name: "HOME NETWORK CERT",
-      provider: "other",
-      domain_names: [$domain]
-    }
-  ],
+  
 
   settings: [
     {
@@ -322,10 +319,10 @@ echo
 
 jq '{
   domain_name,
-  certificate: .certificates[0],
   proxy_hosts: [.proxy_hosts[] | {
     domain: .domain_names[0],
     forward_host,
-    forward_port
+    forward_port,
+    certificate_name
   }]
 }' "${OUTPUT_FILE}"
