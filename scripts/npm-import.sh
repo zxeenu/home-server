@@ -289,7 +289,7 @@ for ((i = 0; i < PROXY_COUNT; i++)); do
     echo
     echo "${LOG_TAG} ${DOMAIN}"
 
-    # Build NPM API payload: remove certificate_name, set certificate_id
+    # Build NPM API payload: remove certificate_name and name, set certificate_id
     HOST_JSON="$(
         jq \
             --argjson index "${i}" \
@@ -297,7 +297,7 @@ for ((i = 0; i < PROXY_COUNT; i++)); do
             '
             .proxy_hosts[$index]
             |
-            del(.certificate_name)
+            del(.certificate_name, .name)   # <-- FIX: delete both fields
             |
             .certificate_id = ($cert_id | tonumber)
             ' \
