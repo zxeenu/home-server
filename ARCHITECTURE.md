@@ -146,7 +146,7 @@ ntfy.eggbase.net       → SERVER_IP
 minecraft.eggbase.net  → SERVER_IP
 ```
 
-The important point is that DNS does **not** directly select the Docker container. Except in the case of Plex, Nfty and Calibre - which are exposed via IP. 
+The important point is that DNS does **not** directly select the Docker container. Except in the case of Plex and Nfty - which are exposed via IP. 
 
 It simply sends the hostname to the server.
 
