@@ -7,7 +7,7 @@ A fully reproducible Docker Compose setup for a personal media server: DNS + ad-
 ✅ **Infrastructure-as-Code** — Version-controlled, reproducible deployment  
 ✅ **Pinned Container Images** — No surprises from `latest` tag updates  
 ✅ **Automated Setup** — One script creates folders, generates `.env`, auto-detects server IP  
-✅ **HTTPS with Auto-Renewal** — ACME/Let's Encrypt integration via acme.sh hook  
+✅ **HTTPS with Auto-Renewal** — Nginx Proxy Manager’s built-in Let’s Encrypt support (DNS‑01 challenge with Cloudflare)
 ✅ **Local DNS** — All services accessible via `.home.lan` domains on your network  
 ✅ **Remote Access** — Tailscale VPN integration for accessing services anywhere  
 ✅ **Easy Maintenance** — Portainer web UI for container management  
@@ -15,7 +15,7 @@ A fully reproducible Docker Compose setup for a personal media server: DNS + ad-
 ## What's Included
 
 | Service | Purpose | Domain (local) | Direct fallback | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **Homepage** | Static dashboard linking to everything | `home.lan` | `:8888` | Static HTML landing page |
 | **Nginx Proxy Manager** | Routes domain names → containers, HTTPS termination | `proxy.lan` | `:81` | Manages certs, proxy hosts, SSL |
 | **Portainer** | Docker container management UI | `portainer.lan` | `:9000` | Monitor/manage all services |
@@ -30,6 +30,7 @@ A fully reproducible Docker Compose setup for a personal media server: DNS + ad-
 | **Minecraft** | Minecraft server (Java + Bedrock via Geyser) | `minecraft.lan` | `:25565` / `:19132` | Multi-platform Minecraft server |
 
 **Optional (commented out by default):**
+
 - **Sonarr** — Automated TV show fetching
 - **Radarr** — Automated movie fetching
 - **Prowlarr** — Indexer manager for Sonarr/Radarr
@@ -42,7 +43,7 @@ A fully reproducible Docker Compose setup for a personal media server: DNS + ad-
 - **Static DHCP lease** in your router for that IP (prevents DNS issues)
 - **Free storage** for `/srv/media` — minimum 100GB for media, or as much as you have
 - **Tailscale account** (free tier) for remote access
-- **acme.sh** (optional) if you want automatic HTTPS certificate renewal
+- **Cloudflare account** with a domain you control (for wildcard HTTPS certificates)
 
 ## Quick Start
 
@@ -58,6 +59,7 @@ sudo ./scripts/setup.sh
 ```
 
 The setup script:
+
 - Creates folder structure at `/srv/appdata` and `/srv/media`
 - Generates `.env` from `.env.example` (first run only)
 - Auto-detects and pre-fills your server's LAN IP as `SERVER_IP`
@@ -71,6 +73,7 @@ nano .env
 ```
 
 Key variables:
+
 ```bash
 SERVER_IP=192.168.1.50          # Your server's LAN IP (auto-detected)
 DOMAIN_NAME=home.lan            # Domain suffix for all services
@@ -93,6 +96,7 @@ docker compose up -d
 ```
 
 Check status:
+
 ```bash
 docker compose ps
 ```
@@ -114,7 +118,7 @@ bash scripts/generate-npm-config.sh
 This generates a JSON template you can import into Nginx Proxy Manager. Alternatively, manually add:
 
 | Domain | Forward Host | Forward Port | SSL |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `home.home.lan` | `homepage` | `80` | Yes |
 | `proxy.home.lan` | `nginxproxymanager` | `81` | Yes |
 | `portainer.home.lan` | `portainer` | `9000` | Yes |
@@ -138,35 +142,46 @@ Now all devices on your WiFi will resolve `*.home.lan` and have ads blocked.
 ### 3. Configure Tailscale
 
 On your server:
+
 ```bash
 # Check Tailscale status
 docker exec tailscale tailscale status
 ```
 
 **On your devices** (phone, laptop, etc.):
+
 - Install Tailscale from your app store
 - Sign in with the same account
 - You'll see your server in the machine list; connect to it
 
 Now you can access `http://home.home.lan:8888` (or any direct port) from anywhere via your Tailnet.
 
-### 4. (Optional) Setup HTTPS with Auto-Renewal
+### 4. Set up SSL in Nginx Proxy Manager
 
-If you have a real domain (e.g., `example.com`) and want automatic certificate renewal:
+Instead of using external tools, NPM can now issue and auto‑renew wildcard certificates via Let’s Encrypt’s DNS‑01 challenge using Cloudflare.
 
-```bash
-# Install acme.sh (if not already installed)
-curl https://get.acme.sh | sh
+1. **Get a Cloudflare API Token**:
+   - Go to Cloudflare Dashboard → Profile → API Tokens.
+   - Create a token with **Zone → DNS → Edit** and **Zone → Zone → Read** permissions.
+   - Scope it to your domain (e.g., `eggbase.net`). Copy the token.
 
-# Configure the ACME hook (generates ~/example.com-npm-cert-update.sh)
-bash scripts/configure-acme-hook.sh
+2. **Add the credential in NPM**:
+   - In NPM admin (`http://<server-ip>:81`), go to **Settings** → **Let's Encrypt** → **Add Credential**.
+   - Provider: **Cloudflare**.
+   - Give it a name (e.g., "Cloudflare DNS").
+   - Paste your API token and save.
 
-# Request a certificate from Let's Encrypt
-~/.acme.sh/acme.sh --issue -d example.com -d '*.example.com' --dns dns_route53
-# (replace dns_route53 with your DNS provider's acme.sh plugin)
-```
+3. **Issue a wildcard certificate**:
+   - Go to **SSL Certificates** → **Add SSL Certificate** → **Let's Encrypt**.
+   - Domain Names: enter your root domain and wildcard, e.g.: `*.eggbase.net eggbase.net`
+   - Challenge: **DNS Challenge** and select your Cloudflare credential.
+   - Email: your email for expiry notifications.
+   - Click **Save** – NPM will set the TXT record and fetch the cert.
 
-The hook will automatically upload renewed certificates to Nginx Proxy Manager every 60 days.
+4. **Apply it to your proxy hosts**:
+   - For each existing proxy host, edit it → SSL tab → select the new cert (named `*.eggbase.net eggbase.net`) from the dropdown.
+
+Now NPM will auto‑renew the certificate every 60 days – no extra scripts, no cron jobs.
 
 ## Project Structure
 
@@ -178,9 +193,9 @@ home-server-setup/
 │
 ├── scripts/
 │   ├── setup.sh                # Initialize folders and .env (run once)
-│   ├── configure-acme-hook.sh  # Register acme.sh certificate renewal hook
 │   ├── generate-npm-config.sh  # Generate Nginx Proxy Manager config from .env
-│   ├── npm-cert-update.sh      # Upload renewed certs to NPM (called by acme.sh)
+│   ├── generate-homepage.sh    # Generates a homepage for all of the services with data from .env file
+    ├── npm-export.sh           # Exports a logical backup of the Nginx Proxy Manager config
 │   └── npm-import.sh           # Import npm-config.json into Nginx Proxy Manager
 │
 ├── subsetup/
@@ -193,6 +208,7 @@ home-server-setup/
 ## Scripts Guide
 
 ### `setup.sh`
+
 **Purpose:** One-time initialization of folder structure and `.env` file.
 
 ```bash
@@ -200,6 +216,7 @@ sudo ./scripts/setup.sh
 ```
 
 **What it does:**
+
 - Creates `/srv/appdata/{npm,portainer,pihole,...}` directories
 - Creates `/srv/media/{movies,tv,downloads,books}`
 - Copies `.env.example` → `.env` (if `.env` doesn't exist)
@@ -207,82 +224,67 @@ sudo ./scripts/setup.sh
 - Sets correct ownership so containers can write to folders
 
 **Key features:**
+
 - Idempotent — safe to run multiple times
 - Detects your server's LAN IP automatically
 - Creates all subdirectories for every service
 - Hands ownership to the sudo user so you can edit files
 
-### `configure-acme-hook.sh`
-**Purpose:** Register the certificate renewal hook with acme.sh.
-
-```bash
-bash scripts/configure-acme-hook.sh
-```
-
-**What it does:**
-- Reads `DOMAIN_NAME` and `IP_ADDRESS` from `.env`
-- Generates a standalone hook script at `~/<DOMAIN_NAME>-npm-cert-update.sh`
-- Registers it with acme.sh via `--install-cert --reloadcmd`
-- Injects variables into the hook so it doesn't need `.env` access
-- Uses `printf %q` for safe variable escaping
-
-**Requirements:**
-- `DOMAIN_NAME` and `IP_ADDRESS` in `.env`
-- acme.sh already installed at `~/.acme.sh/acme.sh`
-
-**Output:** A standalone hook in your home directory that acme.sh calls on certificate renewal.
-
-### `npm-cert-update.sh`
-**Purpose:** Upload renewed ACME certificates to Nginx Proxy Manager.
-
-```bash
-# Called automatically by acme.sh on certificate renewal
-# Can also be run manually:
-bash ~/DOMAIN_NAME-npm-cert-update.sh
-```
-
-**What it does:**
-- Reads certificate files from `~/.acme.sh/<DOMAIN_NAME>_ecc/`
-- Authenticates to Nginx Proxy Manager via email/password
-- Finds the certificate by "nice_name" (not ID, so it's stable)
-- Uploads the new certificate
-- Tries multiple NPM hosts (proxy domain + server IP) for redundancy
-- Sends a notification to ntfy when successful
-
-**Requirements:**
-- `DOMAIN_NAME` and `IP_ADDRESS` embedded in the hook (from configure-acme-hook.sh)
-- `NPM_EMAIL` and `NPM_PASSWORD` in environment (e.g., exported in `~/.zshrc`)
-- `curl` and `jq` installed on host
-- Certificate already exists in NPM with nice_name "HOME NETWORK CERT"
-
-**ntfy Notifications:**
-- Sends to `https://ntfy.<DOMAIN_NAME>/home-alerts` by default
-- Notifies you when certs are renewed successfully
-
 ### `generate-npm-config.sh`
-**Purpose:** Generate a complete Nginx Proxy Manager configuration from `.env`.
+
+***Purpose***: Generate a complete Nginx Proxy Manager configuration from .env.
 
 ```bash
 bash scripts/generate-npm-config.sh
 ```
 
 **What it does:**
+
 - Reads `DOMAIN_NAME` and `IP_ADDRESS` from `.env`
 - Generates `config/npm-config.json` with all proxy hosts pre-configured
 - Creates proxy hosts for all services (home, plex, books, pdf, etc.)
 - Can be imported into Nginx Proxy Manager via the UI
 
 **Output:** `config/npm-config.json` with:
+
 - 9 pre-configured proxy hosts (books, home, ntfy, pdf, pihole, plex, portainer, proxy, torrent)
 - SSL forced to true for all hosts
-- Certificate name set to "HOME NETWORK CERT"
+- Certificate name set to `${DOMAIN_NAME}, *.${DOMAIN_NAME}` (the NPM‑managed wildcard cert)
 - WebSocket support enabled where needed
 
 **Note:** The generated JSON is not version-controlled (it's in `.gitignore`).
 
+### `npm-import.sh`
+
+**Purpose:**
+
+- Import the generated configuration into Nginx Proxy Manager via its API.
+- Looks up the existing Let's Encrypt wildcard certificate by its nice name (`*.${DOMAIN_NAME}, ${DOMAIN_NAME}`)
+
+```bash
+bash scripts/npm-import.sh
+```
+
+**What it does:**
+
+- Authenticates to NPM using `NPM_EMAIL` and `NPM_PASSWORD`
+- Looks up the existing Let's Encrypt wildcard certificate by its exact nice name (`${DOMAIN_NAME}, *.${DOMAIN_NAME}`)
+- For each proxy host defined in the JSON:
+  - If the host exists by domain, it updates it (setting the certificate ID)
+  - If not, it creates a new proxy host
+- Leaves any extra hosts (not in the JSON) untouched
+
+***Requirements***:
+
+- `DOMAIN_NAME` and `IP_ADDRESS` set in `.env`
+- `NPM_EMAIL` and `NPM_PASSWORD` in environment
+- `curl` and `jq` installed
+- The Let's Encrypt certificate already exists in NPM (must be created once via the UI)
+
 ## Image Pinning Strategy
 
 All container images are pinned to their **exact image digest** (not version tags). This ensures:
+
 - ✅ Reproducible deployments (same image always runs)
 - ✅ No unexpected breaking changes from `latest`
 - ✅ Explicit control over updates
@@ -306,6 +308,7 @@ git commit -m "Update <service> image to <new-digest>"
 ```
 
 **Currently pinned versions:**
+
 - Homepage: `nginx:alpine`
 - Nginx Proxy Manager: `jc21/nginx-proxy-manager`
 - Portainer: `portainer/portainer-ce`
@@ -324,6 +327,7 @@ git commit -m "Update <service> image to <new-digest>"
 ### Domains not resolving (`.home.lan` doesn't work)
 
 1. **Check Pi-hole DNS records:**
+
    ```bash
    docker exec pihole cat /etc/dnsmasq.d/local.list
    ```
@@ -333,11 +337,13 @@ git commit -m "Update <service> image to <new-digest>"
    - Secondary DNS: `1.1.1.1` or `8.8.8.8`
 
 3. **Verify from a client:**
+
    ```bash
    nslookup home.home.lan 192.168.1.50  # Should resolve to server IP
    ```
 
 4. **Restart Pi-hole:**
+
    ```bash
    docker compose up -d --force-recreate pihole
    ```
@@ -406,40 +412,29 @@ docker exec tailscale tailscale status
 docker compose logs tailscale
 ```
 
-### ACME certificate renewal fails
-
-```bash
-# Test the hook manually
-~/DOMAIN_NAME-npm-cert-update.sh
-
-# Check acme.sh logs
-cat ~/.acme.sh/acme.sh.log | tail -50
-
-# Verify NPM credentials are exported
-echo $NPM_EMAIL
-echo $NPM_PASSWORD
-```
-
 ## Tailscale Setup
 
 ### Initial Configuration
 
 1. **Get an auth key:**
-   - Visit https://login.tailscale.com/admin/settings/keys
+   - Visit <https://login.tailscale.com/admin/settings/keys>
    - Create a new auth key (can be single-use or reusable)
    - Copy it
 
 2. **Add to `.env`:**
+
    ```bash
    TS_AUTHKEY=tskey_abc123_def456_ghi789
    ```
 
 3. **Start Tailscale:**
+
    ```bash
    docker compose up -d tailscale
    ```
 
 4. **Verify connection:**
+
    ```bash
    docker exec tailscale tailscale status
    ```
@@ -470,6 +465,7 @@ This allows Minecraft to be on the Tailnet independently.
 1. **Uncomment the services** in `docker-compose.yml` (lines 210-257)
 
 2. **Add DNS records** for them in Pi-hole environment block:
+
    ```yaml
    FTLCONF_dns_hosts: |
      ${SERVER_IP} prowlarr.${DOMAIN_NAME}
@@ -479,6 +475,7 @@ This allows Minecraft to be on the Tailnet independently.
    ```
 
 3. **Update setup.sh** to create their appdata folders:
+
    ```bash
    mkdir -p "$APPDATA/prowlarr" "$APPDATA/sonarr" "$APPDATA/radarr"
    ```
@@ -486,6 +483,7 @@ This allows Minecraft to be on the Tailnet independently.
 4. **Add proxy hosts** in Nginx Proxy Manager for each domain
 
 5. **Restart:**
+
    ```bash
    docker compose up -d
    ```
@@ -503,6 +501,7 @@ tar -xzf appdata-backup-*.tar.gz -C /
 ```
 
 For a **DAS (Direct Attached Storage)** setup:
+
 - Mount DAS at `/mnt/storage` (or similar)
 - Point media paths in `.env` to DAS mount
 - Consider RAID for redundancy
@@ -523,16 +522,19 @@ plex:
 Access your media over SMB from Windows/Mac/Linux:
 
 **Windows:**
+
 ```
 \\<server-ip>\media
 ```
 
 **Mac/Linux:**
+
 ```bash
 mount -t cifs //<server-ip>/media /mnt/media -o username=<SMB_USER>,password=<SMB_PASSWORD>
 ```
 
 **From .env:**
+
 ```bash
 SMB_USER=media
 SMB_PASSWORD=yourpassword
@@ -548,6 +550,7 @@ Your home server is automatically part of your Tailnet. To use it remotely:
 4. **Connect to it** — all ports are now accessible
 
 **Example:** Access Plex from a laptop at a friend's place:
+
 ```
 http://home-server.YOUR-TAILNET:32400/web
 ```
@@ -558,7 +561,7 @@ http://home-server.YOUR-TAILNET:32400/web
 - **Pi-hole password** is hashed inside the container; change it via the web UI
 - **Samba is LAN-only by default** — if you expose it via Tailscale, restrict access
 - **ntfy has no auth by default** — fine on trusted LAN, but secure if exposing to internet
-- **NPM credentials** (`NPM_EMAIL`, `NPM_PASSWORD`) stored in shell for cert renewal only
+- **NPM credentials** (`NPM_EMAIL`, `NPM_PASSWORD`) stored in shell for cert renewal only. Cloudflare API token is stored in NPM’s database (plaintext) – scope it to DNS‑edit only for your domain to limit risk.
 - **Tailscale auth keys** should be single-use; generate new ones for each deployment
 - **Don't share your `.env` file** — it contains all passwords and secrets
 
@@ -592,7 +595,7 @@ Why this matters:
 
 By disabling UPnP, you ensure that no service can automatically open your firewall. Combined with zero manual port forwards and Tailscale's secure WireGuard tunnel, your home server remains safely locked down—accessible only to you and your authorized devices.
 
-Note: With UPnP disabled and no open ports, Plex will still work perfectly fine over your local network, and you can securely access it remotely via your Tailscale IP (e.g., http://100.x.x.x:32400).
+Note: With UPnP disabled and no open ports, Plex will still work perfectly fine over your local network, and you can securely access it remotely via your Tailscale IP (e.g., <http://100.x.x.x:32400>).
 
 ## License
 
