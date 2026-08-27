@@ -17,7 +17,7 @@
     "ip": "{{SERVER_IP}}",
     "port": 8080,
     "useHttps": true,
-    "path": ""
+    "path": "/"
   },
   {
     "name": "Pi-hole",
@@ -47,7 +47,7 @@
     "ip": "{{SERVER_IP}}",
     "port": 443,
     "useHttps": true,
-    "path": "/dashboard"
+    "path": "/dashboard/"
   },
   {
     "name": "Stirling PDF",
