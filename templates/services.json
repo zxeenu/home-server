@@ -1,0 +1,82 @@
+[
+  {
+    "name": "Plex",
+    "description": "Watch movies and shows",
+    "note": "{{NOTE_PLEX}}",
+    "domain": "plex.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 32400,
+    "useHttps": true,
+    "path": ""
+  },
+  {
+    "name": "qBittorrent",
+    "description": "Download manager",
+    "note": "{{NOTE_QBITTORRENT}}",
+    "domain": "torrent.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 8080,
+    "useHttps": true,
+    "path": ""
+  },
+  {
+    "name": "Pi-hole",
+    "description": "Network-wide DNS and ad blocking",
+    "note": "{{NOTE_PIHOLE}}",
+    "domain": "pihole.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 8081,
+    "useHttps": true,
+    "path": "/admin"
+  },
+  {
+    "name": "Portainer",
+    "description": "Manage everything running on the server",
+    "note": "{{NOTE_PORTAINER}}",
+    "domain": "portainer.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 9000,
+    "useHttps": true,
+    "path": ""
+  },
+  {
+    "name": "Traefik",
+    "description": "Reverse proxy & automatic HTTPS",
+    "note": "{{NOTE_TRAEFIK}}",
+    "domain": "traefik.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 443,
+    "useHttps": true,
+    "path": "/dashboard"
+  },
+  {
+    "name": "Stirling PDF",
+    "description": "Merge, split, convert, and OCR PDFs",
+    "note": "{{NOTE_STIRLINGPDF}}",
+    "domain": "pdf.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 8082,
+    "useHttps": true,
+    "path": ""
+  },
+  {
+    "name": "ntfy",
+    "description": "Push notifications",
+    "note": "{{NOTE_NTFY}}",
+    "domain": "ntfy.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 8084,
+    "useHttps": true,
+    "path": ""
+  },
+  {
+    "name": "Calibre-Web",
+    "description": "Ebook library and reader",
+    "note": "{{NOTE_CALIBREWEB}}",
+    "domain": "books.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 8083,
+    "useHttps": true,
+    "path": ""
+  }
+]

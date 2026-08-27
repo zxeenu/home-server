@@ -395,11 +395,12 @@
     notifications: [],
     newMessage: '',
 
+    services: [],
+
     getNtfyBaseUrl() {
       if (this.useIp) {
         return 'http://' + this.serverIp + ':8084';
       }
-
       return 'https://ntfy.{{DOMAIN_NAME}}';
     },
 
@@ -455,7 +456,6 @@
       if (this.useIp) {
         return 'https://home.{{DOMAIN_NAME}}';
       }
-
       return 'http://'
         + this.serverIp
         + ':{{HOMEPAGE_PORT}}';
@@ -470,40 +470,27 @@
     async fetchLatestMessages(retry = 1) {
       try {
         const url = this.getNtfyJsonUrl(10);
-
         const resp = await fetch(url);
-
-        if (!resp.ok) {
-          throw new Error('HTTP ' + resp.status);
-        }
-
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const text = await resp.text();
-
         let msgs;
-
         try {
           msgs = JSON.parse(text);
-
-          if (!Array.isArray(msgs)) {
-            throw new Error('Not an array');
-          }
+          if (!Array.isArray(msgs)) throw new Error('Not an array');
         } catch (e) {
           msgs = text
             .split('\n')
             .filter(line => line.trim())
             .map(line => JSON.parse(line));
         }
-
         this.notifications = msgs.map(m => ({
           id: m.id,
           title: m.title || '',
           message: m.message || '',
           time: new Date(m.time * 1000).toLocaleTimeString()
         }));
-
       } catch (err) {
         console.warn('Fetch failed:', err);
-
         if (retry > 0) {
           setTimeout(() => this.fetchLatestMessages(0), 500);
         } else {
@@ -513,24 +500,15 @@
     },
 
     async sendMessage() {
-      if (!this.newMessage.trim()) {
-        return;
-      }
-
+      if (!this.newMessage.trim()) return;
       try {
         const url = this.getNtfyPublishUrl();
-
         const resp = await fetch(url, {
           method: 'POST',
           body: this.newMessage
         });
-
-        if (!resp.ok) {
-          throw new Error('Send failed');
-        }
-
+        if (!resp.ok) throw new Error('Send failed');
         this.newMessage = '';
-
       } catch (err) {
         alert('Failed to send notification: ' + err.message);
       }
@@ -541,130 +519,25 @@
         const es = new EventSource(
           this.getNtfySseUrl()
         );
-
-        es.onopen = () => {
-          this.ntfyConnected = true;
-        };
-
-        es.onerror = () => {
-          this.ntfyConnected = false;
-        };
-
+        es.onopen = () => { this.ntfyConnected = true; };
+        es.onerror = () => { this.ntfyConnected = false; };
         es.onmessage = (e) => {
           let data;
-
-          try {
-            data = JSON.parse(e.data);
-          } catch (err) {
-            return;
-          }
-
-          if (data.event !== 'message') {
-            return;
-          }
-
+          try { data = JSON.parse(e.data); } catch (err) { return; }
+          if (data.event !== 'message') return;
           this.notifications.unshift({
             id: data.id,
             title: data.title || '',
             message: data.message || '',
-            time: new Date(
-              data.time * 1000
-            ).toLocaleTimeString()
+            time: new Date(data.time * 1000).toLocaleTimeString()
           });
-
-          if (this.notifications.length > 10) {
-            this.notifications.pop();
-          }
+          if (this.notifications.length > 10) this.notifications.pop();
         };
-
       } catch (err) {
         this.ntfyConnected = false;
         console.warn('SSE init failed:', err);
       }
-    },
-
-    services: [
-      {
-        name: 'Plex',
-        description: 'Watch movies and shows',
-        note: '{{NOTE_PLEX}}',
-        domain: 'plex.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 32400,
-        useHttps: true
-      },
-
-      {
-        name: 'qBittorrent',
-        description: 'Download manager',
-        note: '{{NOTE_QBITTORRENT}}',
-        domain: 'torrent.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 8080,
-        useHttps: true
-      },
-
-      {
-        name: 'Pi-hole',
-        description: 'Network-wide DNS and ad blocking',
-        note: '{{NOTE_PIHOLE}}',
-        domain: 'pihole.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        path: '/admin',
-        port: 8081,
-        useHttps: true
-      },
-
-      {
-        name: 'Portainer',
-        description: 'Manage everything running on the server',
-        note: '{{NOTE_PORTAINER}}',
-        domain: 'portainer.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 9000,
-        useHttps: true
-      },
-
-      {
-        name: 'Nginx Proxy Manager',
-        description: 'Domain and routing settings',
-        note: '{{NOTE_NGINXPROXYMANAGER}}',
-        domain: 'proxy.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 81,
-        useHttps: true
-      },
-
-      {
-        name: 'Stirling PDF',
-        description: 'Merge, split, convert, and OCR PDFs',
-        note: '{{NOTE_STIRLINGPDF}}',
-        domain: 'pdf.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 8082,
-        useHttps: true
-      },
-
-      {
-        name: 'ntfy',
-        description: 'Push notifications',
-        note: '{{NOTE_NTFY}}',
-        domain: 'ntfy.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 8084,
-        useHttps: true
-      },
-
-      {
-        name: 'Calibre-Web',
-        description: 'Ebook library and reader',
-        note: '{{NOTE_CALIBREWEB}}',
-        domain: 'books.{{DOMAIN_NAME}}',
-        ip: '{{SERVER_IP}}',
-        port: 8083,
-        useHttps: true
-      }
-    ]
+    }
   }"
 
   x-init="
@@ -672,17 +545,17 @@
       window.location.hostname
     );
 
-    initNtfy();
+    fetch('/services.json')
+      .then(res => res.json())
+      .then(data => { services = data; })
+      .catch(err => console.warn('Failed to load services:', err));
 
-    setTimeout(
-      () => fetchLatestMessages(),
-      150
-    );
+    initNtfy();
+    setTimeout(() => fetchLatestMessages(), 150);
   "
 >
 
   <header>
-
     <div class="prompt">
       <a
         :href="getToggleUrl()"
@@ -691,447 +564,161 @@
         ~/home.{{DOMAIN_NAME}}$
       </a>
     </div>
-
     <h1>Services</h1>
-
     <div class="sub">
       Everything running on this network, one tap away.
     </div>
-
     <div class="server-info">
       <span class="status"></span>
       <span>server</span>
-
-      <span
-        class="server-ip"
-        x-text="serverIp"
-      ></span>
+      <span class="server-ip" x-text="serverIp"></span>
     </div>
-
   </header>
 
   <main>
 
     <!-- Notifications -->
-
     <div class="files-card">
-
       <div class="files-header">
-
-        <span
-          class="dot"
-          :class="{ 'dot-off': !ntfyConnected }"
-        ></span>
-
+        <span class="dot" :class="{ 'dot-off': !ntfyConnected }"></span>
         <span class="info">
-
-          <div class="name">
-            Notifications
-          </div>
-
-          <div
-            class="desc"
-            x-text="
-              ntfyConnected
-                ? 'Listening on ' + ntfyTopic
-                : 'Connecting to ntfy…'
-            "
-          ></div>
-
+          <div class="name">Notifications</div>
+          <div class="desc" x-text="ntfyConnected ? 'Listening on ' + ntfyTopic : 'Connecting to ntfy…'"></div>
         </span>
-
         <span class="addresses">
-
-          <a
-            class="domain"
-            href="https://ntfy.{{DOMAIN_NAME}}"
-          >
-            ntfy.{{DOMAIN_NAME}}
-          </a>
-
+          <a class="domain" href="https://ntfy.{{DOMAIN_NAME}}">ntfy.{{DOMAIN_NAME}}</a>
         </span>
-
       </div>
-
       <div class="files-instructions">
-
         <div class="platform">
-
-          <span class="platform-label">
-            Send
-          </span>
-
+          <span class="platform-label">Send</span>
           <span class="send-form">
-
-            <input
-              type="text"
-              x-model="newMessage"
-              placeholder="Write a notification…"
-              @keyup.enter="sendMessage()"
-            >
-
-            <button @click="sendMessage()">
-              Send
-            </button>
-
+            <input type="text" x-model="newMessage" placeholder="Write a notification…" @keyup.enter="sendMessage()">
+            <button @click="sendMessage()">Send</button>
           </span>
-
         </div>
-
         <template x-if="notifications.length">
-
-          <template
-            x-for="n in notifications"
-            :key="n.id"
-          >
-
+          <template x-for="n in notifications" :key="n.id">
             <div class="platform">
-
-              <span
-                class="platform-label"
-                x-text="n.time"
-              ></span>
-
-              <span
-                class="hint"
-                x-text="
-                  n.title
-                    ? (n.title + ' — ' + n.message)
-                    : n.message
-                "
-              ></span>
-
+              <span class="platform-label" x-text="n.time"></span>
+              <span class="hint" x-text="n.title ? (n.title + ' — ' + n.message) : n.message"></span>
             </div>
-
           </template>
-
         </template>
-
         <template x-if="!notifications.length">
-
           <div class="platform">
-
-            <span class="notify-empty">
-              No notifications yet. Send one above or with curl.
-            </span>
-
+            <span class="notify-empty">No notifications yet. Send one above or with curl.</span>
           </div>
-
         </template>
-
       </div>
-
     </div>
 
-
-    <!-- Services -->
-
-    <template
-      x-for="service in services"
-      :key="service.name"
-    >
-
+    <!-- Services (dynamically loaded from services.json) -->
+    <template x-for="service in services" :key="service.name">
       <div class="service">
-
         <span class="dot"></span>
-
-        <a
-          class="info"
-          :href="getServiceUrl(service)"
-          style="text-decoration:none;color:inherit;"
-        >
-
-          <div
-            class="name"
-            x-text="service.name"
-          ></div>
-
-          <div
-            class="desc"
-            x-text="service.description"
-          ></div>
-
+        <a class="info" :href="getServiceUrl(service)" style="text-decoration:none;color:inherit;">
+          <div class="name" x-text="service.name"></div>
+          <div class="desc" x-text="service.description"></div>
           <template x-if="service.note">
-
-            <div
-              class="note"
-              x-text="service.note"
-            ></div>
-
+            <div class="note" x-text="service.note"></div>
           </template>
-
         </a>
-
         <span class="addresses">
-
-          <a
-            class="domain"
-            :href="domainUrl(service)"
-            x-text="service.domain"
-          ></a>
-
-          <a
-            class="ip-link"
-            :href="ipUrl(service)"
-          >
-
-            <span class="ip-label">
-              IP
-            </span>
-
-            <span
-              x-text="
-                service.ip + ':' + service.port
-              "
-            ></span>
-
+          <a class="domain" :href="domainUrl(service)" x-text="service.domain"></a>
+          <a class="ip-link" :href="ipUrl(service)">
+            <span class="ip-label">IP</span>
+            <span x-text="service.ip + ':' + service.port"></span>
           </a>
-
         </span>
-
       </div>
-
     </template>
 
-
-    <!-- Minecraft -->
-
+    <!-- Minecraft (static) -->
     <div class="files-card">
-
       <div class="files-header">
-
         <span class="dot"></span>
-
         <span class="info">
-
-          <div class="name">
-            Minecraft
-          </div>
-
-          <div class="desc">
-            Java + Bedrock server (Paper, Geyser/Floodgate)
-          </div>
-
+          <div class="name">Minecraft</div>
+          <div class="desc">Java + Bedrock server (Paper, Geyser/Floodgate)</div>
         </span>
-
         <span class="addresses">
-
-          <span class="domain">
-            minecraft.{{DOMAIN_NAME}}
-          </span>
-
+          <span class="domain">minecraft.{{DOMAIN_NAME}}</span>
         </span>
-
       </div>
-
       <div class="files-instructions">
-
         <div class="platform">
-
-          <span class="platform-label">
-            Java
-          </span>
-
-          <code>
-            minecraft.{{DOMAIN_NAME}}
-          </code>
-
-          <span class="hint">
-            port 25565 · Multiplayer → Add Server
-          </span>
-
+          <span class="platform-label">Java</span>
+          <code>minecraft.{{DOMAIN_NAME}}</code>
+          <span class="hint">port 25565 · Multiplayer → Add Server</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Fallback
-          </span>
-
-          <code
-            x-text="serverIp + ':25565'"
-          ></code>
-
-          <span class="hint">
-            Use this if DNS is unavailable
-          </span>
-
+          <span class="platform-label">Fallback</span>
+          <code x-text="serverIp + ':25565'"></code>
+          <span class="hint">Use this if DNS is unavailable</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Bedrock
-          </span>
-
-          <code>
-            minecraft.{{DOMAIN_NAME}}
-          </code>
-
-          <span class="hint">
-            port 19132 · mobile / console / Win10-11
-          </span>
-
+          <span class="platform-label">Bedrock</span>
+          <code>minecraft.{{DOMAIN_NAME}}</code>
+          <span class="hint">port 19132 · mobile / console / Win10-11</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Fallback
-          </span>
-
-          <code
-            x-text="serverIp + ':19132'"
-          ></code>
-
-          <span class="hint">
-            Use this if DNS is unavailable
-          </span>
-
+          <span class="platform-label">Fallback</span>
+          <code x-text="serverIp + ':19132'"></code>
+          <span class="hint">Use this if DNS is unavailable</span>
         </div>
-
       </div>
-
     </div>
 
-
-    <!-- Files -->
-
+    <!-- Files (static) -->
     <div class="files-card">
-
       <div class="files-header">
-
         <span class="dot"></span>
-
         <span class="info">
-
-          <div class="name">
-            Files
-          </div>
-
-          <div class="desc">
-            Browse and clean up media over the network
-          </div>
-
+          <div class="name">Files</div>
+          <div class="desc">Browse and clean up media over the network</div>
         </span>
-
         <span class="addresses">
-
-          <span class="domain">
-            files.{{DOMAIN_NAME}}
-          </span>
-
+          <span class="domain">files.{{DOMAIN_NAME}}</span>
         </span>
-
       </div>
-
       <div class="files-instructions">
-
         <div class="platform">
-
-          <span class="platform-label">
-            Windows
-          </span>
-
-          <code>
-            \\files.{{DOMAIN_NAME}}\media
-          </code>
-
-          <span class="hint">
-            File Explorer → paste into address bar
-          </span>
-
+          <span class="platform-label">Windows</span>
+          <code>\\files.{{DOMAIN_NAME}}\media</code>
+          <span class="hint">File Explorer → paste into address bar</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Fallback
-          </span>
-
-          <code
-            x-text="'\\\\' + serverIp + '\\media'"
-          ></code>
-
-          <span class="hint">
-            Use this if DNS is unavailable
-          </span>
-
+          <span class="platform-label">Fallback</span>
+          <code x-text="'\\\\' + serverIp + '\\media'"></code>
+          <span class="hint">Use this if DNS is unavailable</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Mac
-          </span>
-
-          <code>
-            smb://files.{{DOMAIN_NAME}}/media
-          </code>
-
-          <span class="hint">
-            Finder → Go → Connect to Server
-          </span>
-
+          <span class="platform-label">Mac</span>
+          <code>smb://files.{{DOMAIN_NAME}}/media</code>
+          <span class="hint">Finder → Go → Connect to Server</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Fallback
-          </span>
-
-          <code
-            x-text="'smb://' + serverIp + '/media'"
-          ></code>
-
-          <span class="hint">
-            Use this if DNS is unavailable
-          </span>
-
+          <span class="platform-label">Fallback</span>
+          <code x-text="'smb://' + serverIp + '/media'"></code>
+          <span class="hint">Use this if DNS is unavailable</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Phone / other
-          </span>
-
-          <code>
-            smb://files.{{DOMAIN_NAME}}/media
-          </code>
-
-          <span class="hint">
-            Use a file manager app with SMB/network support
-          </span>
-
+          <span class="platform-label">Phone / other</span>
+          <code>smb://files.{{DOMAIN_NAME}}/media</code>
+          <span class="hint">Use a file manager app with SMB/network support</span>
         </div>
-
         <div class="platform">
-
-          <span class="platform-label">
-            Fallback
-          </span>
-
-          <code
-            x-text="'smb://' + serverIp + '/media'"
-          ></code>
-
-          <span class="hint">
-            Use this if DNS is unavailable
-          </span>
-
+          <span class="platform-label">Fallback</span>
+          <code x-text="'smb://' + serverIp + '/media'"></code>
+          <span class="hint">Use this if DNS is unavailable</span>
         </div>
-
       </div>
-
     </div>
 
   </main>
 
-  <footer>
-    Home server · served from this machine
-  </footer>
+  <footer>Home server · served from this machine</footer>
 
 </div>
 

@@ -8,8 +8,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 ENV_FILE="${PROJECT_ROOT}/.env"
-TEMPLATE="${PROJECT_ROOT}/templates/index.html.template"
-OUTPUT="${PROJECT_ROOT}/index.html"
+TEMPLATE_HTML="${PROJECT_ROOT}/templates/index.html"
+TEMPLATE_SERVICES="${PROJECT_ROOT}/templates/services.json"
+OUTPUT_HTML="${PROJECT_ROOT}/index.html"
+OUTPUT_SERVICES="${PROJECT_ROOT}/services.json"
 
 
 # ---------------------------------------------------------------------------
@@ -33,26 +35,20 @@ log() {
 [[ -f "$ENV_FILE" ]] \
     || error ".env not found: $ENV_FILE"
 
-[[ -f "$TEMPLATE" ]] \
-    || error "template not found: $TEMPLATE"
+[[ -f "$TEMPLATE_HTML" ]] \
+    || error "HTML template not found: $TEMPLATE_HTML"
+
+[[ -f "$TEMPLATE_SERVICES" ]] \
+    || error "Services template not found: $TEMPLATE_SERVICES"
 
 
 # ---------------------------------------------------------------------------
 # Load .env
-#
-# We deliberately use `source` here because this allows normal .env syntax:
-#
-#   SERVER_IP=192.168.100.65
-#   NOTE_PLEX="Direct play preferred"
-#
-# Values containing spaces MUST be quoted.
 # ---------------------------------------------------------------------------
 
 set -a
-
 # shellcheck disable=SC1090
 source "$ENV_FILE"
-
 set +a
 
 
@@ -65,39 +61,24 @@ SERVER_IP="${SERVER_IP:-}"
 NTFY_TOPIC="${NTFY_TOPIC:-}"
 HOMEPAGE_PORT="${HOMEPAGE_PORT:-}"
 
-[[ -n "$DOMAIN_NAME" ]] \
-    || error "DOMAIN_NAME is missing from .env"
-
-[[ -n "$SERVER_IP" ]] \
-    || error "SERVER_IP is missing from .env"
-
-[[ -n "$NTFY_TOPIC" ]] \
-    || error "NTFY_TOPIC is missing from .env"
-
-[[ -n "$HOMEPAGE_PORT" ]] \
-    || error "HOMEPAGE_PORT is missing from .env"
+[[ -n "$DOMAIN_NAME" ]] || error "DOMAIN_NAME is missing from .env"
+[[ -n "$SERVER_IP" ]]   || error "SERVER_IP is missing from .env"
+[[ -n "$NTFY_TOPIC" ]]  || error "NTFY_TOPIC is missing from .env"
+[[ -n "$HOMEPAGE_PORT" ]] || error "HOMEPAGE_PORT is missing from .env"
 
 
 # ---------------------------------------------------------------------------
-# Optional notes
-#
-# Every service can have a note.
-# If the variable doesn't exist, it becomes an empty string.
+# Optional notes (for services)
 # ---------------------------------------------------------------------------
 
 NOTE_PLEX="${NOTE_PLEX:-}"
 NOTE_QBITTORRENT="${NOTE_QBITTORRENT:-}"
 NOTE_PIHOLE="${NOTE_PIHOLE:-}"
 NOTE_PORTAINER="${NOTE_PORTAINER:-}"
-NOTE_NGINXPROXYMANAGER="${NOTE_NGINXPROXYMANAGER:-}"
+NOTE_TRAEFIK="${NOTE_TRAEFIK:-}"
 NOTE_STIRLINGPDF="${NOTE_STIRLINGPDF:-}"
 NOTE_NTFY="${NOTE_NTFY:-}"
 NOTE_CALIBREWEB="${NOTE_CALIBREWEB:-}"
-
-
-# ---------------------------------------------------------------------------
-# Export everything used by Perl
-# ---------------------------------------------------------------------------
 
 export \
     DOMAIN_NAME \
@@ -108,7 +89,7 @@ export \
     NOTE_QBITTORRENT \
     NOTE_PIHOLE \
     NOTE_PORTAINER \
-    NOTE_NGINXPROXYMANAGER \
+    NOTE_TRAEFIK \
     NOTE_STIRLINGPDF \
     NOTE_NTFY \
     NOTE_CALIBREWEB
@@ -124,86 +105,111 @@ fi
 
 
 # ---------------------------------------------------------------------------
-# Generate
+# Generate HTML
 # ---------------------------------------------------------------------------
 
 log "Project root: $PROJECT_ROOT"
-log "Template:     $TEMPLATE"
-log "Output:       $OUTPUT"
-log "Domain:       $DOMAIN_NAME"
-log "Server IP:    $SERVER_IP"
+log "HTML template: $TEMPLATE_HTML"
+log "HTML output:   $OUTPUT_HTML"
+log "Domain:        $DOMAIN_NAME"
+log "Server IP:     $SERVER_IP"
 
-
-TMP_FILE="$(mktemp)"
+HTML_TMP="$(mktemp)"
 
 cleanup() {
-    rm -f "$TMP_FILE"
+    rm -f "$HTML_TMP" "$SERVICES_TMP"
 }
-
 trap cleanup EXIT
-
-
-# ---------------------------------------------------------------------------
-# Replace template variables
-# ---------------------------------------------------------------------------
 
 perl -0pe '
 my %values = (
-    "DOMAIN_NAME"              => $ENV{"DOMAIN_NAME"} // "",
-    "SERVER_IP"                => $ENV{"SERVER_IP"} // "",
-    "NTFY_TOPIC"               => $ENV{"NTFY_TOPIC"} // "",
-    "HOMEPAGE_PORT"            => $ENV{"HOMEPAGE_PORT"} // "",
-
-    "NOTE_PLEX"                => $ENV{"NOTE_PLEX"} // "",
-    "NOTE_QBITTORRENT"         => $ENV{"NOTE_QBITTORRENT"} // "",
-    "NOTE_PIHOLE"              => $ENV{"NOTE_PIHOLE"} // "",
-    "NOTE_PORTAINER"           => $ENV{"NOTE_PORTAINER"} // "",
-    "NOTE_NGINXPROXYMANAGER"   => $ENV{"NOTE_NGINXPROXYMANAGER"} // "",
-    "NOTE_STIRLINGPDF"         => $ENV{"NOTE_STIRLINGPDF"} // "",
-    "NOTE_NTFY"                => $ENV{"NOTE_NTFY"} // "",
-    "NOTE_CALIBREWEB"          => $ENV{"NOTE_CALIBREWEB"} // "",
+    "DOMAIN_NAME"    => $ENV{"DOMAIN_NAME"} // "",
+    "SERVER_IP"      => $ENV{"SERVER_IP"} // "",
+    "NTFY_TOPIC"     => $ENV{"NTFY_TOPIC"} // "",
+    "HOMEPAGE_PORT"  => $ENV{"HOMEPAGE_PORT"} // "",
 );
 
 s{
     \{\{([A-Z0-9_]+)\}\}
 }{
-    exists $values{$1}
-        ? $values{$1}
-        : $&
+    exists $values{$1} ? $values{$1} : $&
 }gex;
-' "$TEMPLATE" > "$TMP_FILE"
+' "$TEMPLATE_HTML" > "$HTML_TMP"
+
+chmod 644 "$HTML_TMP"
 
 
 # ---------------------------------------------------------------------------
-# Ensure nginx can read the file
+# Generate services.json
 # ---------------------------------------------------------------------------
 
-chmod 644 "$TMP_FILE"
+log "Services template: $TEMPLATE_SERVICES"
+log "Services output:   $OUTPUT_SERVICES"
+
+SERVICES_TMP="$(mktemp)"
+
+perl -0pe '
+my %values = (
+    "DOMAIN_NAME"    => $ENV{"DOMAIN_NAME"} // "",
+    "SERVER_IP"      => $ENV{"SERVER_IP"} // "",
+    "NOTE_PLEX"              => $ENV{"NOTE_PLEX"} // "",
+    "NOTE_QBITTORRENT"       => $ENV{"NOTE_QBITTORRENT"} // "",
+    "NOTE_PIHOLE"            => $ENV{"NOTE_PIHOLE"} // "",
+    "NOTE_PORTAINER"         => $ENV{"NOTE_PORTAINER"} // "",
+    "NOTE_TRAEFIK"           => $ENV{"NOTE_TRAEFIK"} // "",
+    "NOTE_STIRLINGPDF"       => $ENV{"NOTE_STIRLINGPDF"} // "",
+    "NOTE_NTFY"              => $ENV{"NOTE_NTFY"} // "",
+    "NOTE_CALIBREWEB"        => $ENV{"NOTE_CALIBREWEB"} // "",
+);
+
+s{
+    \{\{([A-Z0-9_]+)\}\}
+}{
+    exists $values{$1} ? $values{$1} : $&
+}gex;
+' "$TEMPLATE_SERVICES" > "$SERVICES_TMP"
+
+chmod 644 "$SERVICES_TMP"
 
 
 # ---------------------------------------------------------------------------
-# Atomic replacement
+# Atomic replacements
 # ---------------------------------------------------------------------------
 
-mv "$TMP_FILE" "$OUTPUT"
+mv "$HTML_TMP" "$OUTPUT_HTML"
+mv "$SERVICES_TMP" "$OUTPUT_SERVICES"
 
 trap - EXIT
 
 
 # ---------------------------------------------------------------------------
-# Verify
+# Verify HTML
 # ---------------------------------------------------------------------------
 
-log "Generated successfully."
-log "Permissions:"
-ls -lah "$OUTPUT"
+log "HTML generated successfully."
+ls -lah "$OUTPUT_HTML"
 
 echo
-log "Checking for unreplaced template variables..."
-
-if grep -oE '\{\{[A-Z0-9_]+\}\}' "$OUTPUT" | sort -u; then
+log "Checking for unreplaced template variables in HTML..."
+if grep -oE '\{\{[A-Z0-9_]+\}\}' "$OUTPUT_HTML" | sort -u; then
     echo
-    log "WARNING: The template contains variables that were not replaced."
+    log "WARNING: The HTML template contains variables that were not replaced."
 else
-    log "All template variables replaced."
+    log "All HTML template variables replaced."
+fi
+
+# ---------------------------------------------------------------------------
+# Verify JSON
+# ---------------------------------------------------------------------------
+
+log "services.json generated successfully."
+ls -lah "$OUTPUT_SERVICES"
+
+echo
+log "Checking for unreplaced template variables in services.json..."
+if grep -oE '\{\{[A-Z0-9_]+\}\}' "$OUTPUT_SERVICES" | sort -u; then
+    echo
+    log "WARNING: The services template contains variables that were not replaced."
+else
+    log "All services template variables replaced."
 fi

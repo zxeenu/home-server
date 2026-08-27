@@ -45,10 +45,11 @@ services:
 
   # ---------------- Home dashboard (static landing page linking to all services) ----------------
   homepage:
-    image: nginx@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
+    image: nginx:alpine@latest
     container_name: homepage
     volumes:
       - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./services.json:/usr/share/nginx/html/services.json:ro
     labels:
       - traefik.enable=true
       - traefik.http.routers.homepage.rule=Host(`home.${DOMAIN_NAME}`)
