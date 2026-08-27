@@ -34,8 +34,7 @@ ENV_DIR="$(dirname "$0")/.."
 
 echo "Creating appdata folders under $APPDATA ..."
 mkdir -p \
-  "$APPDATA/npm/data" \
-  "$APPDATA/npm/letsencrypt" \
+  "$APPDATA/traefik" \
   "$APPDATA/portainer" \
   "$APPDATA/pihole/etc-pihole" \
   "$APPDATA/pihole/etc-dnsmasq.d" \
