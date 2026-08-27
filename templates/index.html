@@ -423,10 +423,6 @@
   ipUrl(service) { return 'http://' + service.ip + ':' + service.port + (service.path || ''); },
   getServiceUrl(service) { return this.useIp ? this.ipUrl(service) : this.domainUrl(service); },
 
-  // Very rough up/down classifier for Uptime Kuma alert text, used only to
-  // color the status dot next to each Kuma alert. Kuma/AutoKuma don't
-  // guarantee an exact message format, so this just looks for the word
-  // "down" anywhere in the title or body - tweak if your phrasing differs.
   isDownMessage(title, message) {
     const text = ((title || '') + ' ' + (message || '')).toLowerCase();
     return text.includes('down');
