@@ -127,10 +127,11 @@ trap cleanup EXIT
 
 perl -0pe '
 my %values = (
-    "DOMAIN_NAME"    => $ENV{"DOMAIN_NAME"} // "",
-    "SERVER_IP"      => $ENV{"SERVER_IP"} // "",
-    "NTFY_TOPIC"     => $ENV{"NTFY_TOPIC"} // "",
-    "HOMEPAGE_PORT"  => $ENV{"HOMEPAGE_PORT"} // "",
+    "DOMAIN_NAME"              => $ENV{"DOMAIN_NAME"} // "",
+    "SERVER_IP"                => $ENV{"SERVER_IP"} // "",
+    "NTFY_TOPIC"               => $ENV{"NTFY_TOPIC"} // "",
+    "HOMEPAGE_PORT"            => $ENV{"HOMEPAGE_PORT"} // "",
+    "NTFY_UPTIME_KUMA_TOPIC"   => $ENV{"NTFY_UPTIME_KUMA_TOPIC"} // "",
 );
 
 s{
