@@ -67,15 +67,16 @@ services:
       - --api.dashboard=true
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
+      # File provider: used only for services Traefik can't discover via Docker
+      # labels, e.g. Plex, which runs with network_mode: host and therefore has
+      # no reachable Docker-network IP for label-based discovery to use.
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
       - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
-      # TEMPORARY: using Let's Encrypt staging to debug without hitting production
-      # rate limits. Remove this line once pihole/books issue is confirmed for
-      # a real cert with `docker compose up -d --force-recreate traefik`.
-      # - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/etc/traefik/acme.json
       # Redirect all HTTP traffic to HTTPS
@@ -88,7 +89,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${APPDATA}/traefik:/etc/traefik
     environment:
-      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      # NOTE: lego (Traefik's ACME library) expects CF_DNS_API_TOKEN for a
+      # scoped Cloudflare API Token. CF_API_TOKEN is not read by the DNS-01
+      # Cloudflare provider, which is why SSL wasn't provisioning.
+      - CF_DNS_API_TOKEN=${CLOUDFLARE_API_TOKEN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)
@@ -170,8 +174,10 @@ services:
     restart: unless-stopped
     # devices:
     #   - /dev/dri:/dev/dri   # uncomment for Intel Quick Sync hardware transcoding
-    # No Traefik labels – Plex uses host networking; access via https://plex.${DOMAIN_NAME}:32400
-    # (or better: set up a custom domain in Plex's Network settings and proxy through Traefik if needed)
+    # No Traefik labels here - Plex uses host networking so Docker label-based
+    # discovery can't reach it. Routing + cert for plex.${DOMAIN_NAME} is defined
+    # manually via Traefik's file provider, see:
+    #   ${APPDATA}/traefik/dynamic/plex.yml
 
   # ---------------- Torrent client ----------------
   qbittorrent:
