@@ -394,121 +394,123 @@
 <body>
 
   <div x-data="{
-  serverIp: '{{SERVER_IP}}',
-  useIp: false,
-  ntfyTopic: '{{NTFY_TOPIC}}',
-  ntfyConnected: false,
-  notifications: [],
-  newMessage: '',
-  kumaTopic: '{{NTFY_UPTIME_KUMA_TOPIC}}',
-  kumaConnected: false,
-  kumaNotifications: [],
-  services: [],
-  loading: true,
+    serverIp: '{{SERVER_IP}}',
+    useIp: false,
+    ntfyTopic: '{{NTFY_TOPIC}}',
+    ntfyConnected: false,
+    notifications: [],
+    newMessage: '',
+    kumaTopic: '{{NTFY_UPTIME_KUMA_TOPIC}}',
+    kumaConnected: false,
+    kumaNotifications: [],
+    services: [],
+    loading: true,
 
-  getNtfyBaseUrl() {
-    return this.useIp ? 'http://' + this.serverIp + ':8084' : 'https://ntfy.{{DOMAIN_NAME}}';
-  },
-  getNtfySseUrl(topic) { return this.getNtfyBaseUrl() + '/' + topic + '/sse'; },
-  getNtfyJsonUrl(topic, limit = 10) { return this.getNtfyBaseUrl() + '/' + topic + '/json?limit=' + limit + '&poll=1'; },
-  getNtfyPublishUrl() { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic; },
+    getNtfyBaseUrl() {
+      return this.useIp ? 'http://' + this.serverIp + ':8084' : 'https://ntfy.{{DOMAIN_NAME}}';
+    },
+    getNtfySseUrl(topic) { return this.getNtfyBaseUrl() + '/' + topic + '/sse'; },
+    getNtfyJsonUrl(topic, limit = 10) { return this.getNtfyBaseUrl() + '/' + topic + '/json?limit=' + limit + '&poll=1'; },
+    getNtfyPublishUrl() { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic; },
 
-  getToggleUrl() {
-    return this.useIp ? 'https://home.{{DOMAIN_NAME}}' : 'http://' + this.serverIp + ':{{HOMEPAGE_PORT}}';
-  },
-  getToggleLabel() { return this.useIp ? 'Switch to domain' : 'Switch to IP'; },
+    getToggleUrl() {
+      return this.useIp ? 'https://home.{{DOMAIN_NAME}}' : 'http://' + this.serverIp + ':{{HOMEPAGE_PORT}}';
+    },
+    getToggleLabel() { return this.useIp ? 'Switch to domain' : 'Switch to IP'; },
 
-  getProtocol(service) { return service.useHttps ? 'https://' : 'http://'; },
-  domainUrl(service) { return this.getProtocol(service) + service.domain + (service.path || ''); },
-  ipUrl(service) { return 'http://' + service.ip + ':' + service.port + (service.path || ''); },
-  getServiceUrl(service) { return this.useIp ? this.ipUrl(service) : this.domainUrl(service); },
+    getProtocol(service) { return service.useHttps ? 'https://' : 'http://'; },
+    domainUrl(service) { return this.getProtocol(service) + service.domain + (service.path || ''); },
+    ipUrl(service) { return 'http://' + service.ip + ':' + service.port + (service.path || ''); },
+    getServiceUrl(service) { return this.useIp ? this.ipUrl(service) : this.domainUrl(service); },
 
-  isDownMessage(title, message) {
-    const text = ((title || '') + ' ' + (message || '')).toLowerCase();
-    return text.includes('down');
-  },
+    isDownMessage(title, message) {
+      const text = ((title || '') + ' ' + (message || '')).toLowerCase();
+      return text.includes('down');
+    },
 
-  async fetchTopic(topic, targetKey, retry = 1) {
-    try {
-      const url = this.getNtfyJsonUrl(topic, 10);
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const text = await resp.text();
-      let msgs;
-      try { msgs = JSON.parse(text); if (!Array.isArray(msgs)) throw new Error(); }
-      catch { msgs = text.split('\n').filter(l => l.trim()).map(l => JSON.parse(l)); }
-      this[targetKey] = msgs.map(m => ({
-        id: m.id,
-        title: m.title || '',
-        message: m.message || '',
-        time: new Date(m.time * 1000).toLocaleTimeString(),
-        down: this.isDownMessage(m.title, m.message)
-      }));
-    } catch (err) {
-      console.warn('Fetch failed (' + topic + '):', err);
-      if (retry > 0) setTimeout(() => this.fetchTopic(topic, targetKey, 0), 500);
-      else this[targetKey] = [];
-    }
-  },
+    async fetchTopic(topic, targetKey, retry = 1) {
+      try {
+        const url = this.getNtfyJsonUrl(topic, 10);
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const text = await resp.text();
+        let msgs;
+        try { msgs = JSON.parse(text); if (!Array.isArray(msgs)) throw new Error(); }
+        catch { msgs = text.split('\n').filter(l => l.trim()).map(l => JSON.parse(l)); }
+        this[targetKey] = msgs.map(m => ({
+          id: m.id,
+          title: m.title || '',
+          message: m.message || '',
+          time: new Date(m.time * 1000).toLocaleTimeString(),
+          down: this.isDownMessage(m.title, m.message)
+        }));
+      } catch (err) {
+        console.warn('Fetch failed (' + topic + '):', err);
+        if (retry > 0) setTimeout(() => this.fetchTopic(topic, targetKey, 0), 500);
+        else this[targetKey] = [];
+      }
+    },
 
-  async sendMessage() {
-    if (!this.newMessage.trim()) return;
-    try {
-      const resp = await fetch(this.getNtfyPublishUrl(), { method: 'POST', body: this.newMessage });
-      if (!resp.ok) throw new Error('Send failed');
-      this.newMessage = '';
-    } catch (err) { alert('Failed to send notification: ' + err.message); }
-  },
+    async sendMessage() {
+      if (!this.newMessage.trim()) return;
+      try {
+        const resp = await fetch(this.getNtfyPublishUrl(), { method: 'POST', body: this.newMessage });
+        if (!resp.ok) throw new Error('Send failed');
+        this.newMessage = '';
+      } catch (err) { alert('Failed to send notification: ' + err.message); }
+    },
 
-  initTopicStream(topic, connectedKey, targetKey) {
-    try {
-      const es = new EventSource(this.getNtfySseUrl(topic));
-      es.onopen = () => { this[connectedKey] = true; };
-      es.onerror = () => { this[connectedKey] = false; };
-      es.onmessage = (e) => {
-        let data;
-        try { data = JSON.parse(e.data); } catch { return; }
-        if (data.event !== 'message') return;
-        this[targetKey].unshift({
-          id: data.id,
-          title: data.title || '',
-          message: data.message || '',
-          time: new Date(data.time * 1000).toLocaleTimeString(),
-          down: this.isDownMessage(data.title, data.message)
+    initTopicStream(topic, connectedKey, targetKey) {
+      try {
+        const es = new EventSource(this.getNtfySseUrl(topic));
+        es.onopen = () => { this[connectedKey] = true; };
+        es.onerror = () => { this[connectedKey] = false; };
+        es.onmessage = (e) => {
+          let data;
+          try { data = JSON.parse(e.data); } catch { return; }
+          if (data.event !== 'message') return;
+          this[targetKey].unshift({
+            id: data.id,
+            title: data.title || '',
+            message: data.message || '',
+            time: new Date(data.time * 1000).toLocaleTimeString(),
+            down: this.isDownMessage(data.title, data.message)
+          });
+          if (this[targetKey].length > 10) this[targetKey].pop();
+        };
+      } catch (err) {
+        this[connectedKey] = false;
+        console.warn('SSE init failed (' + topic + '):', err);
+      }
+    },
+
+    loadServices() {
+      fetch('/services.json?t=' + Date.now())
+        .then(res => res.json())
+        .then(data => {
+          this.services = data;
+          this.loading = false;
+          console.log('Services loaded:', data);
+        })
+        .catch(err => {
+          console.warn('Failed to load services:', err);
+          this.loading = false;
+          this.services = [];
         });
-        if (this[targetKey].length > 10) this[targetKey].pop();
-      };
-    } catch (err) {
-      this[connectedKey] = false;
-      console.warn('SSE init failed (' + topic + '):', err);
-    }
-  },
+    },
 
-  loadServices() {
-    fetch('/services.json?t=' + Date.now())
-      .then(res => res.json())
-      .then(data => {
-        this.services = data;
-        this.loading = false;
-        console.log('Services loaded:', data);
-      })
-      .catch(err => {
-        console.warn('Failed to load services:', err);
-        this.loading = false;
-        this.services = [];
-      });
-  }
-}" x-init="
-  // FIXED: assign to the reactive data property, not a local variable
-  this.useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
-  this.loadServices();
-  this.initTopicStream(this.ntfyTopic, 'ntfyConnected', 'notifications');
-  this.initTopicStream(this.kumaTopic, 'kumaConnected', 'kumaNotifications');
-  setTimeout(() => {
-    this.fetchTopic(this.ntfyTopic, 'notifications');
-    this.fetchTopic(this.kumaTopic, 'kumaNotifications');
-  }, 150);
-">
+    init() {
+      // Detect if we're accessing via IP
+      this.useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+      this.loadServices();
+      this.initTopicStream(this.ntfyTopic, 'ntfyConnected', 'notifications');
+      this.initTopicStream(this.kumaTopic, 'kumaConnected', 'kumaNotifications');
+      setTimeout(() => {
+        this.fetchTopic(this.ntfyTopic, 'notifications');
+        this.fetchTopic(this.kumaTopic, 'kumaNotifications');
+      }, 150);
+    }
+  }" x-init="init()">
 
     <header>
       <div class="prompt">
