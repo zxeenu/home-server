@@ -31,6 +31,8 @@
 #   4. Edit the .env file with your paths, timezone, passwords, and:
 #        ACME_EMAIL=your-email@example.com
 #        CF_DNS_API_TOKEN=your_token
+#        KUMA_USERNAME=admin
+#        KUMA_PASSWORD=your-strong-password
 #   5. Run: docker compose up -d
 #   6. Traefik will automatically obtain Let's Encrypt certificates via DNS-01
 #      for all configured subdomains. All services are reachable at:
@@ -39,6 +41,9 @@
 #      (basic auth is commented out below – uncomment to enable).
 #   8. In Pi-hole, set your router's DNS (or each device's DNS) to the
 #      server's IP so *.${DOMAIN_NAME} resolves for every device on the network.
+#   9. AutoKuma automatically creates Uptime Kuma monitors from Docker labels.
+#      It reads the kuma.* labels defined on each container. No manual setup
+#      in the Uptime Kuma UI is needed.
 # ---------------------------------------------------------------------------
 
 services:
@@ -56,6 +61,9 @@ services:
       - traefik.http.routers.homepage.entrypoints=websecure
       - traefik.http.routers.homepage.tls.certresolver=cloudflare
       - traefik.http.services.homepage.loadbalancer.server.port=80
+      # AutoKuma monitor
+      - kuma.homepage.http.name=Homepage
+      - kuma.homepage.http.url=https://home.${DOMAIN_NAME}
     restart: unless-stopped
 
   # ---------------- Traefik reverse proxy (handles all HTTPS) ----------------
@@ -100,9 +108,12 @@ services:
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.tls.certresolver=cloudflare
       - traefik.http.routers.traefik.service=api@internal
-      # Comment below to diasble basic auth to the dashboard (generate hash with openssl passwd -apr1 yourpassword)
+      # Comment below to disable basic auth to the dashboard (generate hash with openssl passwd -apr1 yourpassword)
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
       - traefik.http.routers.traefik.middlewares=traefik-auth
+      # AutoKuma monitor
+      - kuma.traefik.http.name=Traefik
+      - kuma.traefik.http.url=https://traefik.${DOMAIN_NAME}
     restart: unless-stopped
 
   # ---------------- Docker management UI ----------------
@@ -118,6 +129,9 @@ services:
       - traefik.http.routers.portainer.entrypoints=websecure
       - traefik.http.routers.portainer.tls.certresolver=cloudflare
       - traefik.http.services.portainer.loadbalancer.server.port=9000
+      # AutoKuma monitor
+      - kuma.portainer.http.name=Portainer
+      - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
     restart: unless-stopped
 
   # ---------------- DNS / ad-blocking ----------------
@@ -154,15 +168,20 @@ services:
       - traefik.http.routers.pihole.entrypoints=websecure
       - traefik.http.routers.pihole.tls.certresolver=cloudflare
       - traefik.http.services.pihole.loadbalancer.server.port=80
+      # AutoKuma monitor
+      - kuma.pihole.http.name=Pi-hole
+      - kuma.pihole.http.url=https://pihole.${DOMAIN_NAME}
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
 
   # ---------------- Media server ----------------
+  # Currently running:
+  #   Plex 1.43.3.10896-cb3ebc72d-ls321
   plex:
     image: lscr.io/linuxserver/plex@sha256:f6c58cb2f5e41cd1397bf2ed4e61ef63bd86e0736841b3ef426fabfe04606293
     container_name: plex
-    network_mode: host   # simplest for Plex discovery/DLNA
+    network_mode: host   # simplest for Plex discovery/DLNA; remove if you'd rather bridge+ports
     environment:
       PUID: ${PUID}
       PGID: ${PGID}
@@ -180,8 +199,14 @@ services:
     # discovery can't reach it. Routing + cert for plex.${DOMAIN_NAME} is defined
     # manually via Traefik's file provider, see:
     #   ${APPDATA}/traefik/dynamic/plex.yml
+    # But AutoKuma can still monitor it:
+    labels:
+      - kuma.plex.http.name=Plex
+      - kuma.plex.http.url=https://plex.${DOMAIN_NAME}
 
   # ---------------- Torrent client ----------------
+  # Currently running:
+  #   qBittorrent 5.2.3_v2.0.14-ls472
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent@sha256:212b86dff59e3962b4082b5ef20a577e76c8f8527d2ab505cfa887b4bcecb0b0
     container_name: qbittorrent
@@ -209,17 +234,21 @@ services:
       # - traefik.http.middlewares.add-slash.redirectregex.replacement=$${1}/
       # - traefik.http.middlewares.add-slash.redirectregex.permanent=false
       # - traefik.http.routers.qbittorrent.middlewares=add-slash
+
+      # AutoKuma monitor
+      - kuma.torrent.http.name=qBittorrent
+      - kuma.torrent.http.url=https://torrent.${DOMAIN_NAME}
     restart: unless-stopped
 
-  # ---------------- PDF toolkit ----------------
+  # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
   stirlingpdf:
     image: stirlingtools/stirling-pdf@sha256:3b3670fce70b396ec56ba380a3cc7858e0abf83fe13f31c88f7737847763a396
     container_name: stirlingpdf
     environment:
       TZ: ${TZ}
-      DOCKER_ENABLE_SECURITY: "false"
+      DOCKER_ENABLE_SECURITY: "false"   # set true and configure login if exposing beyond LAN
     volumes:
-      - ${APPDATA}/stirlingpdf/trainingData:/usr/share/tessdata
+      - ${APPDATA}/stirlingpdf/trainingData:/usr/share/tessdata   # OCR language data
       - ${APPDATA}/stirlingpdf/config:/configs
       - ${APPDATA}/stirlingpdf/logs:/logs
     labels:
@@ -228,9 +257,14 @@ services:
       - traefik.http.routers.stirlingpdf.entrypoints=websecure
       - traefik.http.routers.stirlingpdf.tls.certresolver=cloudflare
       - traefik.http.services.stirlingpdf.loadbalancer.server.port=8080
+      # AutoKuma monitor
+      - kuma.pdf.http.name=Stirling PDF
+      - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
     restart: unless-stopped
 
-  # ---------------- Ebook library ----------------
+  # ---------------- Ebook library & web reader ----------------
+  # Calibre-Web NextGen
+  # Pinned to exact image digest.
   calibreweb:
     image: ghcr.io/new-usemame/calibre-web-nextgen@sha256:9ac36a23138e2c84fa48bd9f9e13c8ce1128f53764408ac57e15226628545f87
     container_name: calibreweb
@@ -248,9 +282,12 @@ services:
       - traefik.http.routers.calibreweb.entrypoints=websecure
       - traefik.http.routers.calibreweb.tls.certresolver=cloudflare
       - traefik.http.services.calibreweb.loadbalancer.server.port=8083
+      # AutoKuma monitor
+      - kuma.books.http.name=Calibre-Web
+      - kuma.books.http.url=https://books.${DOMAIN_NAME}
     restart: unless-stopped
 
-  # ---------------- Push notifications ----------------
+  # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
   ntfy:
     image: binwiederhier/ntfy@sha256:f2419f405127afa868f10985c1a41449e673477cee1eb19994339a5ae8b592e7
     container_name: ntfy
@@ -258,7 +295,7 @@ services:
       - serve
     environment:
       TZ: ${TZ}
-      NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/
+      NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
       NTFY_BEHIND_PROXY: true
       NTFY_ENABLE_LOGIN: "false"
       NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
@@ -271,6 +308,9 @@ services:
       - traefik.http.routers.ntfy.entrypoints=websecure
       - traefik.http.routers.ntfy.tls.certresolver=cloudflare
       - traefik.http.services.ntfy.loadbalancer.server.port=80
+      # AutoKuma monitor
+      - kuma.ntfy.http.name=ntfy
+      - kuma.ntfy.http.url=https://ntfy.${DOMAIN_NAME}
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1"]
@@ -280,6 +320,7 @@ services:
       start_period: 40s
 
   # ---------------- Indexer manager (disabled - uncomment to enable automation) ----------------
+  # If you enable this, also add "${SERVER_IP} prowlarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
   # prowlarr:
   #   image: lscr.io/linuxserver/prowlarr:latest
   #   container_name: prowlarr
@@ -295,9 +336,11 @@ services:
   #     - traefik.http.routers.prowlarr.entrypoints=websecure
   #     - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
   #     - traefik.http.services.prowlarr.loadbalancer.server.port=9696
+  #     # AutoKuma monitor (commented out, but you could add it later)
   #   restart: unless-stopped
 
   # ---------------- TV automation (disabled - uncomment to enable automation) ----------------
+  # If you enable this, also add "${SERVER_IP} sonarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
   # sonarr:
   #   image: lscr.io/linuxserver/sonarr:latest
   #   container_name: sonarr
@@ -318,6 +361,7 @@ services:
   #   restart: unless-stopped
 
   # ---------------- Movie automation (disabled - uncomment to enable automation) ----------------
+  # If you enable this, also add "${SERVER_IP} radarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
   # radarr:
   #   image: lscr.io/linuxserver/radarr:latest
   #   container_name: radarr
@@ -383,7 +427,24 @@ services:
       - traefik.http.routers.kuma.entrypoints=websecure
       - traefik.http.routers.kuma.tls.certresolver=cloudflare
       - traefik.http.services.kuma.loadbalancer.server.port=3001
+      # AutoKuma monitor for itself (optional, but can be useful)
+      - kuma.kuma.http.name=Uptime Kuma
+      - kuma.kuma.http.url=https://status.${DOMAIN_NAME}
     restart: unless-stopped
+
+  # ---------------- AutoKuma (automatic monitor creation from Docker labels) ----------------
+  autokuma:
+    image: ghcr.io/bigboot/autokuma:latest
+    container_name: autokuma
+    restart: unless-stopped
+    environment:
+      AUTOKUMA__KUMA__URL: http://uptime-kuma:3001
+      AUTOKUMA__KUMA__USERNAME: ${KUMA_USERNAME}
+      AUTOKUMA__KUMA__PASSWORD: ${KUMA_PASSWORD}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${APPDATA}/autokuma:/data
+    # No labels needed – AutoKuma ignores itself by default
 
 networks:
   default:

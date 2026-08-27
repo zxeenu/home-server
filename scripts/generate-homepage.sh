@@ -79,6 +79,7 @@ NOTE_TRAEFIK="${NOTE_TRAEFIK:-}"
 NOTE_STIRLINGPDF="${NOTE_STIRLINGPDF:-}"
 NOTE_NTFY="${NOTE_NTFY:-}"
 NOTE_CALIBREWEB="${NOTE_CALIBREWEB:-}"
+NOTE_UPTIME_KUMA="${NOTE_UPTIME_KUMA:-}"
 
 export \
     DOMAIN_NAME \
@@ -92,7 +93,8 @@ export \
     NOTE_TRAEFIK \
     NOTE_STIRLINGPDF \
     NOTE_NTFY \
-    NOTE_CALIBREWEB
+    NOTE_CALIBREWEB \
+    NOTE_UPTIME_KUMA
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +162,7 @@ my %values = (
     "NOTE_STIRLINGPDF"       => $ENV{"NOTE_STIRLINGPDF"} // "",
     "NOTE_NTFY"              => $ENV{"NOTE_NTFY"} // "",
     "NOTE_CALIBREWEB"        => $ENV{"NOTE_CALIBREWEB"} // "",
+    "NOTE_UPTIME_KUMA"       => $ENV{"NOTE_UPTIME_KUMA"} // "",
 );
 
 s{
