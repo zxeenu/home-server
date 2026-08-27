@@ -59,7 +59,7 @@ services:
 
   # ---------------- Traefik reverse proxy (handles all HTTPS) ----------------
   traefik:
-    image: traefik:latest
+    image: traefik@sha256:ef751c695afd26e2be41009047f651153dc1e61ace03e6d13f299d8c4be842b8
     container_name: traefik
     command:
       - --log.level=DEBUG
