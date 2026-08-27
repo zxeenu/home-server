@@ -89,9 +89,9 @@ services:
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.tls.certresolver=cloudflare
       - traefik.http.routers.traefik.service=api@internal
-      # Uncomment below to add basic auth to the dashboard (generate hash with htpasswd)
-      # - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
-      # - traefik.http.routers.traefik.middlewares=traefik-auth
+      # Comment below to diasble basic auth to the dashboard (generate hash with openssl passwd -apr1 yourpassword)
+      - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
+      - traefik.http.routers.traefik.middlewares=traefik-auth
     restart: unless-stopped
 
   # ---------------- Docker management UI ----------------
