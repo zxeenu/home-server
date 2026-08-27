@@ -114,7 +114,7 @@ services:
       # AutoKuma monitor
       - kuma.traefik.http.name=Traefik
       - kuma.traefik.http.url=https://traefik.${DOMAIN_NAME}
-      - kuma.traefik.http.accepted_statuscodes: "200,401"   # basic auth returns 401
+      - kuma.traefik.http.accepted_statuscodes="200,401"   # basic auth returns 401
     restart: unless-stopped
 
   # ---------------- Docker management UI ----------------
@@ -172,7 +172,7 @@ services:
       # AutoKuma monitor
       - kuma.pihole.http.name=Pi-hole
       - kuma.pihole.http.url=https://pihole.${DOMAIN_NAME}
-      - kuma.pihole.http.accepted_statuscodes: "200,302"   # redirects / → /admin
+      - kuma.pihole.http.accepted_statuscodes="200,302"   # redirects / → /admin
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -205,7 +205,7 @@ services:
     labels:
       - kuma.plex.http.name=Plex
       - kuma.plex.http.url=https://plex.${DOMAIN_NAME}
-      - kuma.plex.http.accepted_statuscodes: "200,302"   # Plex may redirect
+      - kuma.plex.http.accepted_statuscodes="200,302"   # Plex may redirect
 
   # ---------------- Torrent client ----------------
   # Currently running:
