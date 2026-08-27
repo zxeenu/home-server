@@ -170,9 +170,16 @@ services:
       - traefik.http.routers.pihole.tls.certresolver=cloudflare
       - traefik.http.services.pihole.loadbalancer.server.port=80
       # AutoKuma monitor
-      - kuma.pihole.http.name=Pi-hole
-      - kuma.pihole.http.url=https://pihole.${DOMAIN_NAME}
-      - kuma.pihole.http.accepted_statuscodes=["200","302","403"]   # redirects / → /admin
+      - kuma.pihole.dns.name=Pi-hole DNS
+      - kuma.pihole.dns.hostname=google.com
+      - kuma.pihole.dns.resolver=${SERVER_IP}
+      - kuma.pihole.dns.port=53
+      - kuma.pihole.dns.record_type=A
+
+      # Optional: also keep an HTTP monitor for the admin page
+      - kuma.pihole.http.name=Pi-hole Admin
+      - kuma.pihole.http.url=https://pihole.${DOMAIN_NAME}/admin
+      - kuma.pihole.http.accepted_statuscodes=["400"]
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
