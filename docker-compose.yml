@@ -82,7 +82,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${APPDATA}/traefik:/etc/traefik
     environment:
-      - CF_DNS_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)
