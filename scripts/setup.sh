@@ -54,7 +54,8 @@ mkdir -p \
   "$APPDATA/tailscale" \
   "$APPDATA/minecraft-tailscale" \
   "$APPDATA/other" \
-  "$APPDATA/uptime-kuma"
+  "$APPDATA/uptime-kuma" \
+  "$APPDATA/autokuma"
 
 echo "Creating media folders under $MEDIA ..."
 mkdir -p \
