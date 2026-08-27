@@ -9,6 +9,7 @@ media/
 homelab-cert/
 config/
 /index.html
+/services.json
 
 # OS cruft
 .DS_Store
