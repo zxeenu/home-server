@@ -62,6 +62,7 @@ services:
     image: traefik:latest
     container_name: traefik
     command:
+      - --log.level=DEBUG
       - --api.insecure=false
       - --api.dashboard=true
       - --providers.docker=true
@@ -71,6 +72,10 @@ services:
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
       - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
+      # TEMPORARY: using Let's Encrypt staging to debug without hitting production
+      # rate limits. Remove this line once pihole/books issue is confirmed for
+      # a real cert with `docker compose up -d --force-recreate traefik`.
+      - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/etc/traefik/acme.json
       # Redirect all HTTP traffic to HTTPS
