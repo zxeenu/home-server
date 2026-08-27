@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>home.{{DOMAIN_NAME}}</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>" />
 
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
@@ -14,7 +14,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <style>
-    /* Your complete CSS – included below for brevity, but keep your existing styles */
+    /* Your complete CSS – unchanged */
     :root {
       --bg: #0d1117;
       --panel: #131a24;
@@ -499,13 +499,14 @@
       });
   }
 }" x-init="
-  useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
-  loadServices();
-  initTopicStream(ntfyTopic, 'ntfyConnected', 'notifications');
-  initTopicStream(kumaTopic, 'kumaConnected', 'kumaNotifications');
+  // FIXED: assign to the reactive data property, not a local variable
+  this.useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+  this.loadServices();
+  this.initTopicStream(this.ntfyTopic, 'ntfyConnected', 'notifications');
+  this.initTopicStream(this.kumaTopic, 'kumaConnected', 'kumaNotifications');
   setTimeout(() => {
-    fetchTopic(ntfyTopic, 'notifications');
-    fetchTopic(kumaTopic, 'kumaNotifications');
+    this.fetchTopic(this.ntfyTopic, 'notifications');
+    this.fetchTopic(this.kumaTopic, 'kumaNotifications');
   }, 150);
 ">
 
