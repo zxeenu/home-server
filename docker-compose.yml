@@ -141,6 +141,7 @@ services:
         ${SERVER_IP} books.${DOMAIN_NAME}
         ${SERVER_IP} ntfy.${DOMAIN_NAME}
         ${SERVER_IP} minecraft.${DOMAIN_NAME}
+        ${SERVER_IP} status.${DOMAIN_NAME}
     volumes:
       - ${APPDATA}/pihole/etc-pihole:/etc/pihole
       - ${APPDATA}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
@@ -368,6 +369,20 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
+    restart: unless-stopped
+
+  # ---------------- Uptime Kuma (Status of all the services) ----------------
+  uptime-kuma:
+    image: louislam/uptime-kuma@sha256:3d632903e6af34139a37f18055c4f1bfd9b7205ae1138f1e5e8940ddc1d176f9
+    container_name: uptime-kuma
+    volumes:
+      - ${APPDATA}/uptime-kuma:/app/data
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.kuma.rule=Host(`status.${DOMAIN_NAME}`)
+      - traefik.http.routers.kuma.entrypoints=websecure
+      - traefik.http.routers.kuma.tls.certresolver=cloudflare
+      - traefik.http.services.kuma.loadbalancer.server.port=3001
     restart: unless-stopped
 
 networks:

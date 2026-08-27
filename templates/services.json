@@ -10,6 +10,16 @@
     "path": ""
   },
   {
+    "name": "Calibre-Web",
+    "description": "Ebook library and reader",
+    "note": "{{NOTE_CALIBREWEB}}",
+    "domain": "books.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 8083,
+    "useHttps": true,
+    "path": ""
+  },
+  {
     "name": "qBittorrent",
     "description": "Download manager",
     "note": "{{NOTE_QBITTORRENT}}",
@@ -70,12 +80,12 @@
     "path": ""
   },
   {
-    "name": "Calibre-Web",
-    "description": "Ebook library and reader",
-    "note": "{{NOTE_CALIBREWEB}}",
-    "domain": "books.{{DOMAIN_NAME}}",
+    "name": "Uptime-Kuma",
+    "description": "Uptime Kuma is an easy-to-use self-hosted monitoring tool.",
+    "note": "{{NOTE_UPTIME_KUMA}}",
+    "domain": "status.{{DOMAIN_NAME}}",
     "ip": "{{SERVER_IP}}",
-    "port": 8083,
+    "port": 3001,
     "useHttps": true,
     "path": ""
   }
