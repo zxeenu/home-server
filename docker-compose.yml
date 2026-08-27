@@ -45,7 +45,7 @@ services:
 
   # ---------------- Home dashboard (static landing page linking to all services) ----------------
   homepage:
-    image: nginx:alpine@latest
+    image: nginx:alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
     container_name: homepage
     volumes:
       - ./index.html:/usr/share/nginx/html/index.html:ro
