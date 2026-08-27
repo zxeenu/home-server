@@ -203,9 +203,9 @@ services:
       - traefik.http.routers.qbittorrent.tls.certresolver=cloudflare
       - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
 
-      # Add trailing slash if missing
-      - traefik.http.middlewares.add-slash.redirectregex.regex=^(https?://[^/]+)([^/]*)$
-      - traefik.http.middlewares.add-slash.redirectregex.replacement=$${1}/$${2}
+      # Add trailing slash ONLY if missing (root path)
+      - traefik.http.middlewares.add-slash.redirectregex.regex=^(https?://torrent\.[^/]+)$
+      - traefik.http.middlewares.add-slash.redirectregex.replacement=$${1}/
       - traefik.http.middlewares.add-slash.redirectregex.permanent=false
       - traefik.http.routers.qbittorrent.middlewares=add-slash
     restart: unless-stopped
