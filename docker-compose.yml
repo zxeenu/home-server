@@ -179,7 +179,7 @@ services:
       # Optional: also keep an HTTP monitor for the admin page
       - kuma.pihole.http.name=Pi-hole Admin
       - kuma.pihole.http.url=https://pihole.${DOMAIN_NAME}/admin
-      - kuma.pihole.http.accepted_statuscodes=["400"]
+      - kuma.pihole.http.accepted_statuscodes=["400","200"]
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
