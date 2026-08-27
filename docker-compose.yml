@@ -30,7 +30,7 @@
 #      custom.list).
 #   4. Edit the .env file with your paths, timezone, passwords, and:
 #        ACME_EMAIL=your-email@example.com
-#        CLOUDFLARE_API_TOKEN=your_token
+#        CF_DNS_API_TOKEN=your_token
 #   5. Run: docker compose up -d
 #   6. Traefik will automatically obtain Let's Encrypt certificates via DNS-01
 #      for all configured subdomains. All services are reachable at:
@@ -92,7 +92,7 @@ services:
       # NOTE: lego (Traefik's ACME library) expects CF_DNS_API_TOKEN for a
       # scoped Cloudflare API Token. CF_API_TOKEN is not read by the DNS-01
       # Cloudflare provider, which is why SSL wasn't provisioning.
-      - CF_DNS_API_TOKEN=${CLOUDFLARE_API_TOKEN}
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     labels:
       - traefik.enable=true
       - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)
