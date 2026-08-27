@@ -12,7 +12,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <style>
-    /* same styles as before – omitted for brevity, but keep your existing CSS */
+    /* Your existing CSS – keep it exactly as you had */
     :root {
       --bg: #0d1117;
       --panel: #131a24;
@@ -247,9 +247,9 @@
     }
   </style>
 </head>
-
 <body>
 
+<!-- ========== ALPINE CONTROLLER (only for header + notifications) ========== -->
 <div x-data="{
   serverIp: '{{SERVER_IP}}',
   useIp: false,
@@ -335,79 +335,6 @@ x-init="
   useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
   initNtfy();
   setTimeout(() => fetchLatestMessages(), 150);
-
-  // Vanilla JS to render services (bypass Alpine reactivity)
-  const container = document.getElementById('services-container');
-  const loadingMsg = document.getElementById('services-loading');
-
-  fetch('/services.json?t=' + Date.now())
-    .then(res => res.json())
-    .then(services => {
-      loadingMsg.style.display = 'none';
-      services.forEach(service => {
-        const div = document.createElement('div');
-        div.className = 'service';
-
-        // Dot
-        const dot = document.createElement('span');
-        dot.className = 'dot';
-        div.appendChild(dot);
-
-        // Info link
-        const a = document.createElement('a');
-        a.className = 'info';
-        a.style.textDecoration = 'none';
-        a.style.color = 'inherit';
-
-        const protocol = service.useHttps ? 'https://' : 'http://';
-        const domainUrl = protocol + service.domain + (service.path || '');
-        const ipUrl = 'http://' + service.ip + ':' + service.port + (service.path || '');
-        const serviceUrl = useIp ? ipUrl : domainUrl;
-        a.href = serviceUrl;
-
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'name';
-        nameDiv.textContent = service.name;
-        a.appendChild(nameDiv);
-
-        const descDiv = document.createElement('div');
-        descDiv.className = 'desc';
-        descDiv.textContent = service.description;
-        a.appendChild(descDiv);
-
-        if (service.note) {
-          const noteDiv = document.createElement('div');
-          noteDiv.className = 'note';
-          noteDiv.textContent = service.note;
-          a.appendChild(noteDiv);
-        }
-
-        div.appendChild(a);
-
-        // Addresses
-        const addrSpan = document.createElement('span');
-        addrSpan.className = 'addresses';
-
-        const domainLink = document.createElement('a');
-        domainLink.className = 'domain';
-        domainLink.href = domainUrl;
-        domainLink.textContent = service.domain;
-        addrSpan.appendChild(domainLink);
-
-        const ipLink = document.createElement('a');
-        ipLink.className = 'ip-link';
-        ipLink.href = ipUrl;
-        ipLink.innerHTML = '<span class="ip-label">IP</span>' + service.ip + ':' + service.port;
-        addrSpan.appendChild(ipLink);
-
-        div.appendChild(addrSpan);
-        container.appendChild(div);
-      });
-    })
-    .catch(err => {
-      loadingMsg.textContent = 'Failed to load services.';
-      console.warn('Services fetch error:', err);
-    });
 "
 >
 
@@ -459,11 +386,11 @@ x-init="
       </div>
     </div>
 
-    <!-- Services container – rendered by vanilla JS -->
+    <!-- ====== SERVICES WILL BE RENDERED HERE BY PLAIN JS ====== -->
     <div id="services-loading" style="text-align:center; color:var(--dim); padding:20px;">Loading services…</div>
     <div id="services-container"></div>
 
-    <!-- Minecraft -->
+    <!-- Minecraft (static) -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot"></span>
@@ -481,7 +408,7 @@ x-init="
       </div>
     </div>
 
-    <!-- Files -->
+    <!-- Files (static) -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot"></span>
@@ -503,6 +430,96 @@ x-init="
   </main>
   <footer>Home server · served from this machine</footer>
 </div>
+
+<!-- ========== STANDALONE SCRIPT: fetch + render services ========== -->
+<script>
+  (function() {
+    const container = document.getElementById('services-container');
+    const loadingMsg = document.getElementById('services-loading');
+
+    // Determine if we are on IP mode (by hostname)
+    const useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+
+    fetch('/services.json?t=' + Date.now())
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(services => {
+        loadingMsg.style.display = 'none';
+        if (!services || services.length === 0) {
+          container.innerHTML = '<div class="service" style="justify-content:center; color:var(--dim);">No services found.</div>';
+          return;
+        }
+
+        services.forEach(service => {
+          const div = document.createElement('div');
+          div.className = 'service';
+
+          // Dot
+          const dot = document.createElement('span');
+          dot.className = 'dot';
+          div.appendChild(dot);
+
+          // Info link
+          const a = document.createElement('a');
+          a.className = 'info';
+          a.style.textDecoration = 'none';
+          a.style.color = 'inherit';
+
+          const protocol = service.useHttps ? 'https://' : 'http://';
+          const domainUrl = protocol + service.domain + (service.path || '');
+          const ipUrl = 'http://' + service.ip + ':' + service.port + (service.path || '');
+          const serviceUrl = useIp ? ipUrl : domainUrl;
+          a.href = serviceUrl;
+
+          const nameDiv = document.createElement('div');
+          nameDiv.className = 'name';
+          nameDiv.textContent = service.name;
+          a.appendChild(nameDiv);
+
+          const descDiv = document.createElement('div');
+          descDiv.className = 'desc';
+          descDiv.textContent = service.description;
+          a.appendChild(descDiv);
+
+          if (service.note) {
+            const noteDiv = document.createElement('div');
+            noteDiv.className = 'note';
+            noteDiv.textContent = service.note;
+            a.appendChild(noteDiv);
+          }
+
+          div.appendChild(a);
+
+          // Addresses
+          const addrSpan = document.createElement('span');
+          addrSpan.className = 'addresses';
+
+          const domainLink = document.createElement('a');
+          domainLink.className = 'domain';
+          domainLink.href = domainUrl;
+          domainLink.textContent = service.domain;
+          addrSpan.appendChild(domainLink);
+
+          const ipLink = document.createElement('a');
+          ipLink.className = 'ip-link';
+          ipLink.href = ipUrl;
+          ipLink.innerHTML = '<span class="ip-label">IP</span>' + service.ip + ':' + service.port;
+          addrSpan.appendChild(ipLink);
+
+          div.appendChild(addrSpan);
+          container.appendChild(div);
+        });
+
+        console.log('Services rendered successfully.');
+      })
+      .catch(err => {
+        loadingMsg.textContent = '❌ Failed to load services: ' + err.message;
+        console.error('Services fetch error:', err);
+      });
+  })();
+</script>
 
 </body>
 </html>
