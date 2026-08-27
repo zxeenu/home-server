@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>home.{{DOMAIN_NAME}}</title>
 
-  <!-- Prevent caching during development (optional) -->
+  <!-- Prevent caching during development -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -13,6 +13,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <style>
+    /* (same as before – kept short for brevity) */
     :root {
       --bg: #0d1117;
       --panel: #131a24;
@@ -23,10 +24,8 @@
       --accent: #5fd0a8;
       --accent-dim: rgba(95, 208, 168, 0.12);
     }
-
     [x-cloak] { display: none !important; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       background: var(--bg);
       color: var(--text);
@@ -34,14 +33,12 @@
       min-height: 100vh;
       padding: 56px 24px 80px;
     }
-
     header {
       max-width: 760px;
       margin: 0 auto 36px;
       padding-bottom: 24px;
       border-bottom: 1px solid var(--line);
     }
-
     .prompt {
       color: var(--accent);
       font-size: 12px;
@@ -57,10 +54,8 @@
       border-bottom-style: solid;
       color: #7ae0b8;
     }
-
     h1 { font-size: 30px; font-weight: 600; margin-top: 8px; letter-spacing: -0.02em; }
     .sub { color: var(--dim); font-size: 12px; margin-top: 7px; }
-
     .server-info {
       display: flex;
       align-items: center;
@@ -83,7 +78,6 @@
       border-radius: 4px;
       padding: 4px 8px;
     }
-
     main {
       max-width: 760px;
       margin: 0 auto;
@@ -91,7 +85,6 @@
       flex-direction: column;
       gap: 8px;
     }
-
     .service {
       display: flex;
       align-items: center;
@@ -110,7 +103,6 @@
       transform: translateY(-1px);
     }
     .service:hover .name { color: var(--accent); }
-
     .dot {
       width: 9px;
       height: 9px;
@@ -124,19 +116,10 @@
       background: var(--dim);
       box-shadow: 0 0 0 4px rgba(107, 120, 137, 0.12);
     }
-
-    .info {
-      flex: 1;
-      min-width: 0;
-    }
-    .name {
-      font-size: 14px;
-      font-weight: 600;
-      transition: color 0.12s ease;
-    }
+    .info { flex: 1; min-width: 0; }
+    .name { font-size: 14px; font-weight: 600; transition: color 0.12s ease; }
     .desc { color: var(--dim); font-size: 11px; margin-top: 4px; }
     .note { color: var(--dim); font-size: 11px; margin-top: 3px; }
-
     .addresses {
       display: flex;
       align-items: center;
@@ -149,7 +132,6 @@
       text-decoration: none;
     }
     .domain:hover { color: var(--accent); }
-
     .ip-link {
       display: inline-flex;
       align-items: center;
@@ -168,7 +150,6 @@
       background: #0d1716;
     }
     .ip-label { color: #4f5b6b; margin-right: 5px; }
-
     .files-card {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -211,9 +192,7 @@
       font-size: 10px;
     }
     .platform .hint { color: var(--dim); }
-
     .notify-empty { color: var(--dim); font-size: 11px; }
-
     .send-form {
       display: flex;
       gap: 10px;
@@ -246,7 +225,6 @@
     }
     .send-form button:hover { background: rgba(95, 208, 168, 0.2); }
     .send-form button:active { transform: scale(0.96); }
-
     footer {
       max-width: 760px;
       margin: 30px auto 0;
@@ -254,7 +232,6 @@
       font-size: 10px;
       opacity: 0.8;
     }
-
     @media (max-width: 650px) {
       body { padding: 36px 16px 60px; }
       .addresses { flex-direction: column; align-items: flex-end; }
@@ -274,138 +251,137 @@
 
 <body>
 
-<div x-data="{
-  serverIp: '{{SERVER_IP}}',
-  useIp: false,
-  ntfyTopic: '{{NTFY_TOPIC}}',
-  ntfyConnected: false,
-  notifications: [],
-  newMessage: '',
-  services: [],
+<div
+  x-data="{
+    serverIp: '{{SERVER_IP}}',
+    useIp: false,
+    ntfyTopic: '{{NTFY_TOPIC}}',
+    ntfyConnected: false,
+    notifications: [],
+    newMessage: '',
+    services: [],
+    loading: true,
 
-  getNtfyBaseUrl() {
-    return this.useIp
-      ? 'http://' + this.serverIp + ':8084'
-      : 'https://ntfy.{{DOMAIN_NAME}}';
-  },
+    getNtfyBaseUrl() {
+      return this.useIp
+        ? 'http://' + this.serverIp + ':8084'
+        : 'https://ntfy.{{DOMAIN_NAME}}';
+    },
+    getNtfySseUrl() {
+      return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/sse';
+    },
+    getNtfyJsonUrl(limit = 10) {
+      return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/json?limit=' + limit + '&poll=1';
+    },
+    getNtfyPublishUrl() {
+      return this.getNtfyBaseUrl() + '/' + this.ntfyTopic;
+    },
+    getProtocol(service) {
+      return service.useHttps ? 'https://' : 'http://';
+    },
+    domainUrl(service) {
+      return this.getProtocol(service) + service.domain + (service.path || '');
+    },
+    ipUrl(service) {
+      return 'http://' + service.ip + ':' + service.port + (service.path || '');
+    },
+    getServiceUrl(service) {
+      return this.useIp ? this.ipUrl(service) : this.domainUrl(service);
+    },
+    getToggleUrl() {
+      return this.useIp
+        ? 'https://home.{{DOMAIN_NAME}}'
+        : 'http://' + this.serverIp + ':{{HOMEPAGE_PORT}}';
+    },
+    getToggleLabel() {
+      return this.useIp ? 'Switch to domain' : 'Switch to IP';
+    },
 
-  getNtfySseUrl() {
-    return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/sse';
-  },
-
-  getNtfyJsonUrl(limit = 10) {
-    return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/json?limit=' + limit + '&poll=1';
-  },
-
-  getNtfyPublishUrl() {
-    return this.getNtfyBaseUrl() + '/' + this.ntfyTopic;
-  },
-
-  getProtocol(service) {
-    return service.useHttps ? 'https://' : 'http://';
-  },
-
-  domainUrl(service) {
-    return this.getProtocol(service) + service.domain + (service.path || '');
-  },
-
-  ipUrl(service) {
-    return 'http://' + service.ip + ':' + service.port + (service.path || '');
-  },
-
-  getServiceUrl(service) {
-    return this.useIp ? this.ipUrl(service) : this.domainUrl(service);
-  },
-
-  getToggleUrl() {
-    return this.useIp
-      ? 'https://home.{{DOMAIN_NAME}}'
-      : 'http://' + this.serverIp + ':{{HOMEPAGE_PORT}}';
-  },
-
-  getToggleLabel() {
-    return this.useIp ? 'Switch to domain' : 'Switch to IP';
-  },
-
-  async fetchLatestMessages(retry = 1) {
-    try {
-      const url = this.getNtfyJsonUrl(10);
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const text = await resp.text();
-      let msgs;
+    async fetchLatestMessages(retry = 1) {
       try {
-        msgs = JSON.parse(text);
-        if (!Array.isArray(msgs)) throw new Error('Not an array');
-      } catch {
-        msgs = text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
+        const url = this.getNtfyJsonUrl(10);
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const text = await resp.text();
+        let msgs;
+        try {
+          msgs = JSON.parse(text);
+          if (!Array.isArray(msgs)) throw new Error('Not an array');
+        } catch {
+          msgs = text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
+        }
+        this.notifications = msgs.map(m => ({
+          id: m.id,
+          title: m.title || '',
+          message: m.message || '',
+          time: new Date(m.time * 1000).toLocaleTimeString()
+        }));
+      } catch (err) {
+        console.warn('Fetch failed:', err);
+        if (retry > 0) {
+          setTimeout(() => this.fetchLatestMessages(0), 500);
+        } else {
+          this.notifications = [];
+        }
       }
-      this.notifications = msgs.map(m => ({
-        id: m.id,
-        title: m.title || '',
-        message: m.message || '',
-        time: new Date(m.time * 1000).toLocaleTimeString()
-      }));
-    } catch (err) {
-      console.warn('Fetch failed:', err);
-      if (retry > 0) {
-        setTimeout(() => this.fetchLatestMessages(0), 500);
-      } else {
-        this.notifications = [];
+    },
+
+    async sendMessage() {
+      if (!this.newMessage.trim()) return;
+      try {
+        const url = this.getNtfyPublishUrl();
+        const resp = await fetch(url, { method: 'POST', body: this.newMessage });
+        if (!resp.ok) throw new Error('Send failed');
+        this.newMessage = '';
+      } catch (err) {
+        alert('Failed to send notification: ' + err.message);
       }
-    }
-  },
+    },
 
-  async sendMessage() {
-    if (!this.newMessage.trim()) return;
-    try {
-      const url = this.getNtfyPublishUrl();
-      const resp = await fetch(url, { method: 'POST', body: this.newMessage });
-      if (!resp.ok) throw new Error('Send failed');
-      this.newMessage = '';
-    } catch (err) {
-      alert('Failed to send notification: ' + err.message);
-    }
-  },
+    initNtfy() {
+      try {
+        const es = new EventSource(this.getNtfySseUrl());
+        es.onopen = () => { this.ntfyConnected = true; };
+        es.onerror = () => { this.ntfyConnected = false; };
+        es.onmessage = (e) => {
+          let data;
+          try { data = JSON.parse(e.data); } catch { return; }
+          if (data.event !== 'message') return;
+          this.notifications.unshift({
+            id: data.id,
+            title: data.title || '',
+            message: data.message || '',
+            time: new Date(data.time * 1000).toLocaleTimeString()
+          });
+          if (this.notifications.length > 10) this.notifications.pop();
+        };
+      } catch (err) {
+        this.ntfyConnected = false;
+        console.warn('SSE init failed:', err);
+      }
+    },
 
-  initNtfy() {
-    try {
-      const es = new EventSource(this.getNtfySseUrl());
-      es.onopen = () => { this.ntfyConnected = true; };
-      es.onerror = () => { this.ntfyConnected = false; };
-      es.onmessage = (e) => {
-        let data;
-        try { data = JSON.parse(e.data); } catch { return; }
-        if (data.event !== 'message') return;
-        this.notifications.unshift({
-          id: data.id,
-          title: data.title || '',
-          message: data.message || '',
-          time: new Date(data.time * 1000).toLocaleTimeString()
+    loadServices() {
+      fetch('/services.json?t=' + Date.now())
+        .then(res => res.json())
+        .then(data => {
+          this.services = data;
+          this.loading = false;
+          console.log('Services loaded:', data);
+        })
+        .catch(err => {
+          console.warn('Failed to load services:', err);
+          this.loading = false;
         });
-        if (this.notifications.length > 10) this.notifications.pop();
-      };
-    } catch (err) {
-      this.ntfyConnected = false;
-      console.warn('SSE init failed:', err);
     }
-  }
-}"
+  }"
 
-x-init="
-  useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
-
-  fetch('/services.json?t=' + Date.now())
-    .then(res => res.json())
-    .then(data => {
-      this.services = data;
-      console.log('Services loaded:', data);
-    })
-    .catch(err => console.warn('Failed to load services:', err));
-
-  initNtfy();
-  setTimeout(() => fetchLatestMessages(), 150);
-"
+  x-init="
+    useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+    loadServices();
+    initNtfy();
+    setTimeout(() => fetchLatestMessages(), 150);
+  "
 >
 
   <header>
@@ -422,7 +398,7 @@ x-init="
   </header>
 
   <main>
-    <!-- Notifications -->
+    <!-- Notifications (unchanged) -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot" :class="{ 'dot-off': !ntfyConnected }"></span>
@@ -458,7 +434,15 @@ x-init="
       </div>
     </div>
 
-    <!-- Services (loaded from services.json) -->
+    <!-- Services – with loading state and debug -->
+    <template x-if="loading">
+      <div class="service" style="justify-content:center; color:var(--dim);">Loading services…</div>
+    </template>
+
+    <template x-if="!loading && services.length === 0">
+      <div class="service" style="justify-content:center; color:var(--dim);">No services found.</div>
+    </template>
+
     <template x-for="service in services" :key="service.name">
       <div class="service">
         <span class="dot"></span>
@@ -479,7 +463,7 @@ x-init="
       </div>
     </template>
 
-    <!-- Minecraft (static) -->
+    <!-- Minecraft & Files sections (unchanged) -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot"></span>
@@ -515,7 +499,6 @@ x-init="
       </div>
     </div>
 
-    <!-- Files (static) -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot"></span>
