@@ -24,6 +24,8 @@
       --dim: #6b7889;
       --accent: #5fd0a8;
       --accent-dim: rgba(95, 208, 168, 0.12);
+      --danger: #e2574c;
+      --danger-dim: rgba(226, 87, 76, 0.14);
     }
 
     [x-cloak] {
@@ -151,6 +153,20 @@
     .dot-off {
       background: var(--dim);
       box-shadow: 0 0 0 4px rgba(107, 120, 137, 0.12);
+    }
+
+    .mini-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+      flex-shrink: 0;
+    }
+
+    .mini-dot-down {
+      background: var(--danger);
+      box-shadow: 0 0 0 3px var(--danger-dim);
     }
 
     .info {
@@ -384,14 +400,17 @@
   ntfyConnected: false,
   notifications: [],
   newMessage: '',
+  kumaTopic: '{{NTFY_UPTIME_KUMA_TOPIC}}',
+  kumaConnected: false,
+  kumaNotifications: [],
   services: [],
   loading: true,
 
   getNtfyBaseUrl() {
     return this.useIp ? 'http://' + this.serverIp + ':8084' : 'https://ntfy.{{DOMAIN_NAME}}';
   },
-  getNtfySseUrl() { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/sse'; },
-  getNtfyJsonUrl(limit = 10) { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/json?limit=' + limit + '&poll=1'; },
+  getNtfySseUrl(topic) { return this.getNtfyBaseUrl() + '/' + topic + '/sse'; },
+  getNtfyJsonUrl(topic, limit = 10) { return this.getNtfyBaseUrl() + '/' + topic + '/json?limit=' + limit + '&poll=1'; },
   getNtfyPublishUrl() { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic; },
 
   getToggleUrl() {
@@ -404,25 +423,35 @@
   ipUrl(service) { return 'http://' + service.ip + ':' + service.port + (service.path || ''); },
   getServiceUrl(service) { return this.useIp ? this.ipUrl(service) : this.domainUrl(service); },
 
-  async fetchLatestMessages(retry = 1) {
+  // Very rough up/down classifier for Uptime Kuma alert text, used only to
+  // color the status dot next to each Kuma alert. Kuma/AutoKuma don't
+  // guarantee an exact message format, so this just looks for the word
+  // "down" anywhere in the title or body - tweak if your phrasing differs.
+  isDownMessage(title, message) {
+    const text = ((title || '') + ' ' + (message || '')).toLowerCase();
+    return text.includes('down');
+  },
+
+  async fetchTopic(topic, targetKey, retry = 1) {
     try {
-      const url = this.getNtfyJsonUrl(10);
+      const url = this.getNtfyJsonUrl(topic, 10);
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const text = await resp.text();
       let msgs;
       try { msgs = JSON.parse(text); if (!Array.isArray(msgs)) throw new Error(); }
       catch { msgs = text.split('\n').filter(l => l.trim()).map(l => JSON.parse(l)); }
-      this.notifications = msgs.map(m => ({
+      this[targetKey] = msgs.map(m => ({
         id: m.id,
         title: m.title || '',
         message: m.message || '',
-        time: new Date(m.time * 1000).toLocaleTimeString()
+        time: new Date(m.time * 1000).toLocaleTimeString(),
+        down: this.isDownMessage(m.title, m.message)
       }));
     } catch (err) {
-      console.warn('Fetch failed:', err);
-      if (retry > 0) setTimeout(() => this.fetchLatestMessages(0), 500);
-      else this.notifications = [];
+      console.warn('Fetch failed (' + topic + '):', err);
+      if (retry > 0) setTimeout(() => this.fetchTopic(topic, targetKey, 0), 500);
+      else this[targetKey] = [];
     }
   },
 
@@ -435,26 +464,27 @@
     } catch (err) { alert('Failed to send notification: ' + err.message); }
   },
 
-  initNtfy() {
+  initTopicStream(topic, connectedKey, targetKey) {
     try {
-      const es = new EventSource(this.getNtfySseUrl());
-      es.onopen = () => { this.ntfyConnected = true; };
-      es.onerror = () => { this.ntfyConnected = false; };
+      const es = new EventSource(this.getNtfySseUrl(topic));
+      es.onopen = () => { this[connectedKey] = true; };
+      es.onerror = () => { this[connectedKey] = false; };
       es.onmessage = (e) => {
         let data;
         try { data = JSON.parse(e.data); } catch { return; }
         if (data.event !== 'message') return;
-        this.notifications.unshift({
+        this[targetKey].unshift({
           id: data.id,
           title: data.title || '',
           message: data.message || '',
-          time: new Date(data.time * 1000).toLocaleTimeString()
+          time: new Date(data.time * 1000).toLocaleTimeString(),
+          down: this.isDownMessage(data.title, data.message)
         });
-        if (this.notifications.length > 10) this.notifications.pop();
+        if (this[targetKey].length > 10) this[targetKey].pop();
       };
     } catch (err) {
-      this.ntfyConnected = false;
-      console.warn('SSE init failed:', err);
+      this[connectedKey] = false;
+      console.warn('SSE init failed (' + topic + '):', err);
     }
   },
 
@@ -475,8 +505,12 @@
 }" x-init="
   useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
   loadServices();
-  initNtfy();
-  setTimeout(() => fetchLatestMessages(), 150);
+  initTopicStream(ntfyTopic, 'ntfyConnected', 'notifications');
+  initTopicStream(kumaTopic, 'kumaConnected', 'kumaNotifications');
+  setTimeout(() => {
+    fetchTopic(ntfyTopic, 'notifications');
+    fetchTopic(kumaTopic, 'kumaNotifications');
+  }, 150);
 ">
 
     <header>
@@ -523,6 +557,34 @@
           </template>
           <template x-if="!notifications.length">
             <div class="platform"><span class="notify-empty">No notifications yet.</span></div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Uptime Kuma alerts -->
+      <div class="files-card">
+        <div class="files-header">
+          <span class="dot" :class="{ 'dot-off': !kumaConnected }"></span>
+          <span class="info">
+            <div class="name">Uptime Kuma Alerts</div>
+            <div class="desc" x-text="kumaConnected ? 'Listening on ' + kumaTopic : 'Connecting to ntfy…'"></div>
+          </span>
+          <span class="addresses">
+            <a class="domain" href="https://status.{{DOMAIN_NAME}}">status.{{DOMAIN_NAME}}</a>
+          </span>
+        </div>
+        <div class="files-instructions">
+          <template x-if="kumaNotifications.length">
+            <template x-for="n in kumaNotifications" :key="n.id">
+              <div class="platform">
+                <span class="mini-dot" :class="{ 'mini-dot-down': n.down }"></span>
+                <span class="platform-label" x-text="n.time"></span>
+                <span class="hint" x-text="n.title ? (n.title + ' — ' + n.message) : n.message"></span>
+              </div>
+            </template>
+          </template>
+          <template x-if="!kumaNotifications.length">
+            <div class="platform"><span class="notify-empty">No alerts yet — all monitors healthy.</span></div>
           </template>
         </div>
       </div>

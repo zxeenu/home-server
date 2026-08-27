@@ -80,6 +80,7 @@ NOTE_STIRLINGPDF="${NOTE_STIRLINGPDF:-}"
 NOTE_NTFY="${NOTE_NTFY:-}"
 NOTE_CALIBREWEB="${NOTE_CALIBREWEB:-}"
 NOTE_UPTIME_KUMA="${NOTE_UPTIME_KUMA:-}"
+NTFY_UPTIME_KUMA_TOPIC="${NTFY_UPTIME_KUMA_TOPIC:-}"
 
 export \
     DOMAIN_NAME \
@@ -94,7 +95,8 @@ export \
     NOTE_STIRLINGPDF \
     NOTE_NTFY \
     NOTE_CALIBREWEB \
-    NOTE_UPTIME_KUMA
+    NOTE_UPTIME_KUMA \
+    NTFY_UPTIME_KUMA_TOPIC
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +165,7 @@ my %values = (
     "NOTE_NTFY"              => $ENV{"NOTE_NTFY"} // "",
     "NOTE_CALIBREWEB"        => $ENV{"NOTE_CALIBREWEB"} // "",
     "NOTE_UPTIME_KUMA"       => $ENV{"NOTE_UPTIME_KUMA"} // "",
+    "NTFY_UPTIME_KUMA_TOPIC" => $ENV{"NTFY_UPTIME_KUMA_TOPIC"} // "",
 );
 
 s{
