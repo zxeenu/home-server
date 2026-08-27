@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>home.{{DOMAIN_NAME}}</title>
 
-  <!-- Prevent caching during development -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -13,7 +12,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
   <style>
-    /* (same as before – kept short for brevity) */
+    /* same styles as before – omitted for brevity, but keep your existing CSS */
     :root {
       --bg: #0d1117;
       --panel: #131a24;
@@ -251,137 +250,165 @@
 
 <body>
 
-<div
-  x-data="{
-    serverIp: '{{SERVER_IP}}',
-    useIp: false,
-    ntfyTopic: '{{NTFY_TOPIC}}',
-    ntfyConnected: false,
-    notifications: [],
-    newMessage: '',
-    services: [],
-    loading: true,
+<div x-data="{
+  serverIp: '{{SERVER_IP}}',
+  useIp: false,
+  ntfyTopic: '{{NTFY_TOPIC}}',
+  ntfyConnected: false,
+  notifications: [],
+  newMessage: '',
 
-    getNtfyBaseUrl() {
-      return this.useIp
-        ? 'http://' + this.serverIp + ':8084'
-        : 'https://ntfy.{{DOMAIN_NAME}}';
-    },
-    getNtfySseUrl() {
-      return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/sse';
-    },
-    getNtfyJsonUrl(limit = 10) {
-      return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/json?limit=' + limit + '&poll=1';
-    },
-    getNtfyPublishUrl() {
-      return this.getNtfyBaseUrl() + '/' + this.ntfyTopic;
-    },
-    getProtocol(service) {
-      return service.useHttps ? 'https://' : 'http://';
-    },
-    domainUrl(service) {
-      return this.getProtocol(service) + service.domain + (service.path || '');
-    },
-    ipUrl(service) {
-      return 'http://' + service.ip + ':' + service.port + (service.path || '');
-    },
-    getServiceUrl(service) {
-      return this.useIp ? this.ipUrl(service) : this.domainUrl(service);
-    },
-    getToggleUrl() {
-      return this.useIp
-        ? 'https://home.{{DOMAIN_NAME}}'
-        : 'http://' + this.serverIp + ':{{HOMEPAGE_PORT}}';
-    },
-    getToggleLabel() {
-      return this.useIp ? 'Switch to domain' : 'Switch to IP';
-    },
+  getNtfyBaseUrl() {
+    return this.useIp ? 'http://' + this.serverIp + ':8084' : 'https://ntfy.{{DOMAIN_NAME}}';
+  },
+  getNtfySseUrl() { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/sse'; },
+  getNtfyJsonUrl(limit = 10) { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic + '/json?limit=' + limit + '&poll=1'; },
+  getNtfyPublishUrl() { return this.getNtfyBaseUrl() + '/' + this.ntfyTopic; },
 
-    async fetchLatestMessages(retry = 1) {
+  getToggleUrl() {
+    return this.useIp ? 'https://home.{{DOMAIN_NAME}}' : 'http://' + this.serverIp + ':{{HOMEPAGE_PORT}}';
+  },
+  getToggleLabel() { return this.useIp ? 'Switch to domain' : 'Switch to IP'; },
+
+  async fetchLatestMessages(retry = 1) {
+    try {
+      const url = this.getNtfyJsonUrl(10);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      let msgs;
       try {
-        const url = this.getNtfyJsonUrl(10);
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const text = await resp.text();
-        let msgs;
-        try {
-          msgs = JSON.parse(text);
-          if (!Array.isArray(msgs)) throw new Error('Not an array');
-        } catch {
-          msgs = text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
-        }
-        this.notifications = msgs.map(m => ({
-          id: m.id,
-          title: m.title || '',
-          message: m.message || '',
-          time: new Date(m.time * 1000).toLocaleTimeString()
-        }));
-      } catch (err) {
-        console.warn('Fetch failed:', err);
-        if (retry > 0) {
-          setTimeout(() => this.fetchLatestMessages(0), 500);
-        } else {
-          this.notifications = [];
-        }
+        msgs = JSON.parse(text);
+        if (!Array.isArray(msgs)) throw new Error('Not an array');
+      } catch {
+        msgs = text.split('\n').filter(line => line.trim()).map(line => JSON.parse(line));
       }
-    },
-
-    async sendMessage() {
-      if (!this.newMessage.trim()) return;
-      try {
-        const url = this.getNtfyPublishUrl();
-        const resp = await fetch(url, { method: 'POST', body: this.newMessage });
-        if (!resp.ok) throw new Error('Send failed');
-        this.newMessage = '';
-      } catch (err) {
-        alert('Failed to send notification: ' + err.message);
-      }
-    },
-
-    initNtfy() {
-      try {
-        const es = new EventSource(this.getNtfySseUrl());
-        es.onopen = () => { this.ntfyConnected = true; };
-        es.onerror = () => { this.ntfyConnected = false; };
-        es.onmessage = (e) => {
-          let data;
-          try { data = JSON.parse(e.data); } catch { return; }
-          if (data.event !== 'message') return;
-          this.notifications.unshift({
-            id: data.id,
-            title: data.title || '',
-            message: data.message || '',
-            time: new Date(data.time * 1000).toLocaleTimeString()
-          });
-          if (this.notifications.length > 10) this.notifications.pop();
-        };
-      } catch (err) {
-        this.ntfyConnected = false;
-        console.warn('SSE init failed:', err);
-      }
-    },
-
-    loadServices() {
-      fetch('/services.json?t=' + Date.now())
-        .then(res => res.json())
-        .then(data => {
-          this.services = data;
-          this.loading = false;
-          console.log('Services loaded:', data);
-        })
-        .catch(err => {
-          console.warn('Failed to load services:', err);
-          this.loading = false;
-        });
+      this.notifications = msgs.map(m => ({
+        id: m.id,
+        title: m.title || '',
+        message: m.message || '',
+        time: new Date(m.time * 1000).toLocaleTimeString()
+      }));
+    } catch (err) {
+      console.warn('Fetch failed:', err);
+      if (retry > 0) setTimeout(() => this.fetchLatestMessages(0), 500);
+      else this.notifications = [];
     }
-  }"
+  },
 
-  x-init="
-    useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
-    loadServices();
-    initNtfy();
-    setTimeout(() => fetchLatestMessages(), 150);
-  "
+  async sendMessage() {
+    if (!this.newMessage.trim()) return;
+    try {
+      const resp = await fetch(this.getNtfyPublishUrl(), { method: 'POST', body: this.newMessage });
+      if (!resp.ok) throw new Error('Send failed');
+      this.newMessage = '';
+    } catch (err) {
+      alert('Failed to send notification: ' + err.message);
+    }
+  },
+
+  initNtfy() {
+    try {
+      const es = new EventSource(this.getNtfySseUrl());
+      es.onopen = () => { this.ntfyConnected = true; };
+      es.onerror = () => { this.ntfyConnected = false; };
+      es.onmessage = (e) => {
+        let data;
+        try { data = JSON.parse(e.data); } catch { return; }
+        if (data.event !== 'message') return;
+        this.notifications.unshift({
+          id: data.id,
+          title: data.title || '',
+          message: data.message || '',
+          time: new Date(data.time * 1000).toLocaleTimeString()
+        });
+        if (this.notifications.length > 10) this.notifications.pop();
+      };
+    } catch (err) {
+      this.ntfyConnected = false;
+      console.warn('SSE init failed:', err);
+    }
+  }
+}"
+
+x-init="
+  useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
+  initNtfy();
+  setTimeout(() => fetchLatestMessages(), 150);
+
+  // Vanilla JS to render services (bypass Alpine reactivity)
+  const container = document.getElementById('services-container');
+  const loadingMsg = document.getElementById('services-loading');
+
+  fetch('/services.json?t=' + Date.now())
+    .then(res => res.json())
+    .then(services => {
+      loadingMsg.style.display = 'none';
+      services.forEach(service => {
+        const div = document.createElement('div');
+        div.className = 'service';
+
+        // Dot
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        div.appendChild(dot);
+
+        // Info link
+        const a = document.createElement('a');
+        a.className = 'info';
+        a.style.textDecoration = 'none';
+        a.style.color = 'inherit';
+
+        const protocol = service.useHttps ? 'https://' : 'http://';
+        const domainUrl = protocol + service.domain + (service.path || '');
+        const ipUrl = 'http://' + service.ip + ':' + service.port + (service.path || '');
+        const serviceUrl = useIp ? ipUrl : domainUrl;
+        a.href = serviceUrl;
+
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'name';
+        nameDiv.textContent = service.name;
+        a.appendChild(nameDiv);
+
+        const descDiv = document.createElement('div');
+        descDiv.className = 'desc';
+        descDiv.textContent = service.description;
+        a.appendChild(descDiv);
+
+        if (service.note) {
+          const noteDiv = document.createElement('div');
+          noteDiv.className = 'note';
+          noteDiv.textContent = service.note;
+          a.appendChild(noteDiv);
+        }
+
+        div.appendChild(a);
+
+        // Addresses
+        const addrSpan = document.createElement('span');
+        addrSpan.className = 'addresses';
+
+        const domainLink = document.createElement('a');
+        domainLink.className = 'domain';
+        domainLink.href = domainUrl;
+        domainLink.textContent = service.domain;
+        addrSpan.appendChild(domainLink);
+
+        const ipLink = document.createElement('a');
+        ipLink.className = 'ip-link';
+        ipLink.href = ipUrl;
+        ipLink.innerHTML = '<span class="ip-label">IP</span>' + service.ip + ':' + service.port;
+        addrSpan.appendChild(ipLink);
+
+        div.appendChild(addrSpan);
+        container.appendChild(div);
+      });
+    })
+    .catch(err => {
+      loadingMsg.textContent = 'Failed to load services.';
+      console.warn('Services fetch error:', err);
+    });
+"
 >
 
   <header>
@@ -398,7 +425,7 @@
   </header>
 
   <main>
-    <!-- Notifications (unchanged) -->
+    <!-- Notifications -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot" :class="{ 'dot-off': !ntfyConnected }"></span>
@@ -427,43 +454,16 @@
           </template>
         </template>
         <template x-if="!notifications.length">
-          <div class="platform">
-            <span class="notify-empty">No notifications yet. Send one above or with curl.</span>
-          </div>
+          <div class="platform"><span class="notify-empty">No notifications yet.</span></div>
         </template>
       </div>
     </div>
 
-    <!-- Services – with loading state and debug -->
-    <template x-if="loading">
-      <div class="service" style="justify-content:center; color:var(--dim);">Loading services…</div>
-    </template>
+    <!-- Services container – rendered by vanilla JS -->
+    <div id="services-loading" style="text-align:center; color:var(--dim); padding:20px;">Loading services…</div>
+    <div id="services-container"></div>
 
-    <template x-if="!loading && services.length === 0">
-      <div class="service" style="justify-content:center; color:var(--dim);">No services found.</div>
-    </template>
-
-    <template x-for="service in services" :key="service.name">
-      <div class="service">
-        <span class="dot"></span>
-        <a class="info" :href="getServiceUrl(service)" style="text-decoration:none;color:inherit;">
-          <div class="name" x-text="service.name"></div>
-          <div class="desc" x-text="service.description"></div>
-          <template x-if="service.note">
-            <div class="note" x-text="service.note"></div>
-          </template>
-        </a>
-        <span class="addresses">
-          <a class="domain" :href="domainUrl(service)" x-text="service.domain"></a>
-          <a class="ip-link" :href="ipUrl(service)">
-            <span class="ip-label">IP</span>
-            <span x-text="service.ip + ':' + service.port"></span>
-          </a>
-        </span>
-      </div>
-    </template>
-
-    <!-- Minecraft & Files sections (unchanged) -->
+    <!-- Minecraft -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot"></span>
@@ -471,34 +471,17 @@
           <div class="name">Minecraft</div>
           <div class="desc">Java + Bedrock server (Paper, Geyser/Floodgate)</div>
         </span>
-        <span class="addresses">
-          <span class="domain">minecraft.{{DOMAIN_NAME}}</span>
-        </span>
+        <span class="addresses"><span class="domain">minecraft.{{DOMAIN_NAME}}</span></span>
       </div>
       <div class="files-instructions">
-        <div class="platform">
-          <span class="platform-label">Java</span>
-          <code>minecraft.{{DOMAIN_NAME}}</code>
-          <span class="hint">port 25565 · Multiplayer → Add Server</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Fallback</span>
-          <code x-text="serverIp + ':25565'"></code>
-          <span class="hint">Use this if DNS is unavailable</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Bedrock</span>
-          <code>minecraft.{{DOMAIN_NAME}}</code>
-          <span class="hint">port 19132 · mobile / console / Win10-11</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Fallback</span>
-          <code x-text="serverIp + ':19132'"></code>
-          <span class="hint">Use this if DNS is unavailable</span>
-        </div>
+        <div class="platform"><span class="platform-label">Java</span><code>minecraft.{{DOMAIN_NAME}}</code><span class="hint">port 25565</span></div>
+        <div class="platform"><span class="platform-label">Fallback</span><code x-text="serverIp + ':25565'"></code><span class="hint">Use if DNS unavailable</span></div>
+        <div class="platform"><span class="platform-label">Bedrock</span><code>minecraft.{{DOMAIN_NAME}}</code><span class="hint">port 19132</span></div>
+        <div class="platform"><span class="platform-label">Fallback</span><code x-text="serverIp + ':19132'"></code><span class="hint">Use if DNS unavailable</span></div>
       </div>
     </div>
 
+    <!-- Files -->
     <div class="files-card">
       <div class="files-header">
         <span class="dot"></span>
@@ -506,47 +489,19 @@
           <div class="name">Files</div>
           <div class="desc">Browse and clean up media over the network</div>
         </span>
-        <span class="addresses">
-          <span class="domain">files.{{DOMAIN_NAME}}</span>
-        </span>
+        <span class="addresses"><span class="domain">files.{{DOMAIN_NAME}}</span></span>
       </div>
       <div class="files-instructions">
-        <div class="platform">
-          <span class="platform-label">Windows</span>
-          <code>\\files.{{DOMAIN_NAME}}\media</code>
-          <span class="hint">File Explorer → paste into address bar</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Fallback</span>
-          <code x-text="'\\\\' + serverIp + '\\media'"></code>
-          <span class="hint">Use this if DNS is unavailable</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Mac</span>
-          <code>smb://files.{{DOMAIN_NAME}}/media</code>
-          <span class="hint">Finder → Go → Connect to Server</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Fallback</span>
-          <code x-text="'smb://' + serverIp + '/media'"></code>
-          <span class="hint">Use this if DNS is unavailable</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Phone / other</span>
-          <code>smb://files.{{DOMAIN_NAME}}/media</code>
-          <span class="hint">Use a file manager app with SMB/network support</span>
-        </div>
-        <div class="platform">
-          <span class="platform-label">Fallback</span>
-          <code x-text="'smb://' + serverIp + '/media'"></code>
-          <span class="hint">Use this if DNS is unavailable</span>
-        </div>
+        <div class="platform"><span class="platform-label">Windows</span><code>\\files.{{DOMAIN_NAME}}\media</code><span class="hint">File Explorer</span></div>
+        <div class="platform"><span class="platform-label">Fallback</span><code x-text="'\\\\' + serverIp + '\\media'"></code><span class="hint">Use if DNS unavailable</span></div>
+        <div class="platform"><span class="platform-label">Mac</span><code>smb://files.{{DOMAIN_NAME}}/media</code><span class="hint">Finder → Connect</span></div>
+        <div class="platform"><span class="platform-label">Fallback</span><code x-text="'smb://' + serverIp + '/media'"></code><span class="hint">Use if DNS unavailable</span></div>
+        <div class="platform"><span class="platform-label">Phone</span><code>smb://files.{{DOMAIN_NAME}}/media</code><span class="hint">SMB file manager</span></div>
+        <div class="platform"><span class="platform-label">Fallback</span><code x-text="'smb://' + serverIp + '/media'"></code><span class="hint">Use if DNS unavailable</span></div>
       </div>
     </div>
   </main>
-
   <footer>Home server · served from this machine</footer>
-
 </div>
 
 </body>
