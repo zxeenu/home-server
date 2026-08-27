@@ -417,7 +417,8 @@ services:
 
   # ---------------- Uptime Kuma (Status of all the services) ----------------
   uptime-kuma:
-    image: louislam/uptime-kuma@sha256:3d632903e6af34139a37f18055c4f1bfd9b7205ae1138f1e5e8940ddc1d176f9
+  # Version 2 latest digest
+    image: louislam/uptime-kuma@sha256:3e24e96c89efff0e3a4b0698cbdd36c15ad3022371db57166e5588853002ee5c
     container_name: uptime-kuma
     volumes:
       - ${APPDATA}/uptime-kuma:/app/data
@@ -434,7 +435,7 @@ services:
 
   # ---------------- AutoKuma (automatic monitor creation from Docker labels) ----------------
   autokuma:
-    image: ghcr.io/bigboot/autokuma:latest
+    image: ghcr.io/bigboot/autokuma@sha256:8acbd3ad3ec8cb6c066aa0ee541154921283ec78159015937128541921c47974
     container_name: autokuma
     restart: unless-stopped
     environment:
