@@ -75,7 +75,7 @@ services:
       # TEMPORARY: using Let's Encrypt staging to debug without hitting production
       # rate limits. Remove this line once pihole/books issue is confirmed for
       # a real cert with `docker compose up -d --force-recreate traefik`.
-      - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
+      # - --certificatesresolvers.cloudflare.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/etc/traefik/acme.json
       # Redirect all HTTP traffic to HTTPS
