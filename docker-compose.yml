@@ -328,7 +328,7 @@ services:
       resources:
         limits:
           cpus: '0.75'
-          memory: 1g
+          memory: 2G
 
   # ---------------- Ebook library & web reader ----------------
   # Calibre-Web NextGen
