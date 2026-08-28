@@ -324,11 +324,11 @@ services:
       - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
       - kuma.pdf.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.75'
-    #       memory: 512M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 512M
 
   # ---------------- Ebook library & web reader ----------------
   # Calibre-Web NextGen
@@ -355,11 +355,11 @@ services:
       - kuma.books.http.url=https://books.${DOMAIN_NAME}
       - kuma.books.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.75'
-    #       memory: 384M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 384M
 
   # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
   ntfy:

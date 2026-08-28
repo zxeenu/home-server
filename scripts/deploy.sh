@@ -20,12 +20,12 @@ echo "    Configuration updated successfully."
 echo
 
 echo "==> Generating Homepage configuration"
-sudo -n ./scripts/generate-homepage.sh
+sudo -n "$HOME/home-server/scripts/generate-homepage.sh"
 echo "    Homepage configuration generated successfully."
 echo
 
 echo "==> Running server setup"
-sudo -n ./scripts/setup.sh
+sudo -n "$HOME/home-server/scripts/setup.sh"
 echo "    Server setup completed successfully."
 echo
 
