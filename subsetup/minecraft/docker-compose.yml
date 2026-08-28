@@ -23,6 +23,12 @@ services:
     tty: true
     restart: unless-stopped
 
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 4G
+
 networks:
   minecraft-net:
     name: minecraft-net

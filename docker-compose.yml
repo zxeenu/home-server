@@ -359,7 +359,7 @@ services:
       resources:
         limits:
           cpus: '0.75'
-          memory: 384M
+          memory: 512M
 
   # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
   ntfy:

@@ -22,3 +22,9 @@ services:
     command: tailscaled
 
     restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M

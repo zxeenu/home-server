@@ -2,7 +2,11 @@
 
 set -euo pipefail
 
-cd "$HOME/home-server"
+HOME_SERVER="$HOME/home-server"
+MINECRAFT="$HOME_SERVER/subsetup/minecraft"
+MINECRAFT_TAILSCALE="$HOME_SERVER/subsetup/minecraft-tailscale"
+
+cd "$HOME_SERVER"
 
 echo
 echo "========================================"
@@ -20,34 +24,78 @@ echo "    Configuration updated successfully."
 echo
 
 echo "==> Generating Homepage configuration"
-sudo -n "$HOME/home-server/scripts/generate-homepage.sh"
+sudo -n "$HOME_SERVER/scripts/generate-homepage.sh"
 echo "    Homepage configuration generated successfully."
 echo
 
 echo "==> Running server setup"
-sudo -n "$HOME/home-server/scripts/setup.sh"
+sudo -n "$HOME_SERVER/scripts/setup.sh"
 echo "    Server setup completed successfully."
 echo
 
-echo "==> Validating Docker Compose configuration"
+echo "==> Validating Home Server Docker Compose configuration"
 docker compose config --quiet
-echo "    Docker Compose configuration is valid."
+echo "    Home Server Compose configuration is valid."
 echo
 
-echo "==> Stopping existing containers"
+echo "==> Validating Minecraft Docker Compose configuration"
+cd "$MINECRAFT"
+docker compose config --quiet
+echo "    Minecraft Compose configuration is valid."
+echo
+
+echo "==> Validating Minecraft Tailscale Docker Compose configuration"
+cd "$MINECRAFT_TAILSCALE"
+docker compose config --quiet
+echo "    Minecraft Tailscale Compose configuration is valid."
+echo
+
+echo "========================================"
+echo "       Configuration Validated"
+echo "========================================"
+echo
+
+echo "==> Deploying Home Server containers"
+cd "$HOME_SERVER"
 docker compose down --remove-orphans
-echo "    Existing containers stopped and removed."
-echo
-
-echo "==> Deploying containers"
 docker compose up -d --force-recreate --remove-orphans
-echo "    Containers deployed successfully."
+echo "    Home Server containers deployed successfully."
 echo
 
-echo "==> Checking container status"
+echo "==> Deploying Minecraft containers"
+cd "$MINECRAFT"
+docker compose down --remove-orphans
+docker compose up -d --force-recreate --remove-orphans
+echo "    Minecraft containers deployed successfully."
+echo
+
+echo "==> Deploying Minecraft Tailscale containers"
+cd "$MINECRAFT_TAILSCALE"
+docker compose down --remove-orphans
+docker compose up -d --force-recreate --remove-orphans
+echo "    Minecraft Tailscale containers deployed successfully."
+echo
+
+echo "========================================"
+echo "       Container Status"
+echo "========================================"
+echo
+
+echo "==> Home Server"
+cd "$HOME_SERVER"
 docker compose ps
-echo
 
+echo
+echo "==> Minecraft"
+cd "$MINECRAFT"
+docker compose ps
+
+echo
+echo "==> Minecraft Tailscale"
+cd "$MINECRAFT_TAILSCALE"
+docker compose ps
+
+echo
 echo "========================================"
 echo "       Deployment Complete"
 echo "========================================"
