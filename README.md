@@ -10,12 +10,19 @@ The goal is deliberately simple:
 
 ---
 
-## Architecture
+## But really, why does this exist?
+
+I want a home server, and when this **bastard** eventually explodes, I want to be able to rebuild it.
+
+---
+
+# Architecture
 
 The server is split into three Compose projects:
 
 ```text
-home-server-setup/
+home-server/
+
 │
 ├── docker-compose.yml
 │   └── Main home-server stack
@@ -39,7 +46,7 @@ home-server-setup/
         └── ...
 ```
 
-### Main stack
+## Main stack
 
 The main Compose project contains:
 
@@ -57,7 +64,7 @@ The main Compose project contains:
 * Uptime Kuma
 * AutoKuma
 
-### Minecraft stack
+## Minecraft stack
 
 Minecraft is deliberately separated from the main stack.
 
@@ -167,7 +174,7 @@ The token should be restricted to the required DNS permissions for the relevant 
 
 The DNS-01 challenge means the server does **not** need to expose an HTTP challenge endpoint to the internet.
 
-Cloudflare is being used for DNS and ACME DNS-01 validation. The application traffic itself does not need to pass through Cloudflare's proxy.
+Cloudflare is being used for DNS and ACME DNS-01 validation. Application traffic itself does not need to pass through Cloudflare's proxy.
 
 ---
 
@@ -330,57 +337,108 @@ The ntfy service itself intentionally does not depend on the ntfy notification p
 
 # Automated Deployment
 
+## Repository & Deployment Model
+
+This project uses two Git repositories.
+
+### Public repository
+
+The public repository contains:
+
+* Home-server configuration
+* Documentation
+* Architecture
+* Deployment tooling
+* Reproducible infrastructure definitions
+
+It serves as the public, reproducible representation of the infrastructure and as a technical reference for the project.
+
+### Private repository
+
+The private repository contains the operational copy used for automated deployment.
+
+The separation is intentional.
+
+The server uses a **self-hosted GitHub Actions runner installed directly on the home server**. Because the runner has access to the server and its Docker environment, it is a high-trust execution environment.
+
+Keeping the deployment workflow in the private repository prevents the public repository from directly exposing GitHub Actions workflows capable of executing commands on the home server.
+
+The resulting model is:
+
+```text
+Public Repository
+    │
+    │  Infrastructure, configuration & documentation
+    │
+    ▼
+Private Repository
+    │
+    │  Trusted deployment workflow
+    ▼
+GitHub Actions
+    │
+    ▼
+Self-Hosted Runner
+    │
+    ▼
+Home Server
+    │
+    ▼
+Docker Compose
+```
+
+This creates a deliberate separation between **publicly documented infrastructure** and the **private automation that has authority to operate it**.
+
+The public repository can therefore remain open as a technical reference and portfolio for the project, while the private repository acts as the trusted deployment control plane.
+
+---
+
 ## GitHub Actions
 
 Deployment is automated through GitHub Actions.
 
-The repository uses a **self-hosted GitHub Actions runner installed directly on the home server**.
-
-The general deployment flow is:
+The self-hosted runner runs directly on the home server and is assigned a dedicated label:
 
 ```text
-Git push
-   │
-   ▼
-GitHub
-   │
-   ▼
-GitHub Actions workflow
-   │
-   ▼
-Self-hosted runner
-   │
-   ▼
-Repository checkout/update
-   │
-   ▼
-Docker Compose
-   │
-   ▼
-Updated services
+eggbase-net
 ```
 
-The runner is labelled so the deployment workflow can explicitly target the home server.
-
-For example:
+The deployment workflow targets:
 
 ```yaml
 runs-on: [self-hosted, Linux, X64, eggbase-net]
 ```
 
-This prevents the deployment job from being sent to an arbitrary GitHub-hosted machine.
+This provides an explicit connection between:
 
----
+```text
+Private GitHub repository
+        │
+        ▼
+GitHub Actions
+        │
+        ▼
+eggbase-net runner
+        │
+        ▼
+Home server
+        │
+        ▼
+Docker Compose
+        │
+        ▼
+Updated services
+```
 
-## Deployment model
+The runner can therefore apply infrastructure changes without exposing Docker's management interface to the public internet.
 
-The server is therefore both:
+The server is simultaneously:
 
 * the production environment
 * the deployment target
 * the GitHub Actions runner
 
-The workflow is responsible for applying the repository's desired state to the server.
+This is intentional. The project is a single-node home infrastructure environment, so the deployment system is kept deliberately simple rather than introducing an external orchestration platform.
 
 A typical deployment consists of:
 
@@ -403,12 +461,39 @@ Push
   ↓
 GitHub Actions
   ↓
+Self-hosted runner
+  ↓
 Home server
   ↓
 Compose deployment
 ```
 
-This is intentionally much simpler than introducing Kubernetes or another orchestration layer.
+---
+
+## Runner troubleshooting
+
+Check the runner service:
+
+```bash
+sudo systemctl status "$(cat .service)"
+```
+
+View recent logs:
+
+```bash
+sudo journalctl -u "$(cat .service)" -n 50 --no-pager
+```
+
+Check that the runner is online in GitHub and that its labels match the workflow's `runs-on` configuration.
+
+If a workflow remains queued, verify:
+
+1. The runner service is running.
+2. The runner is online in GitHub.
+3. The runner has the expected labels.
+4. The workflow requests those exact labels.
+5. The runner has permission to access Docker.
+6. The repository checkout directory is correct.
 
 ---
 
@@ -485,7 +570,9 @@ Its JVM also detects the container's memory limit and dynamically configures its
 
 ```text
 InitialRAM = 25%
+
 MaxRAM = 60%
+
 MaxMeta = 128M
 ```
 
@@ -497,6 +584,7 @@ The default directory layout is:
 
 ```text
 /srv/
+
 ├── appdata/
 │   ├── autokuma/
 │   ├── calibreweb/
@@ -552,14 +640,16 @@ The setup has been developed and tested primarily on Ubuntu.
 Clone the repository:
 
 ```bash
-git clone https://github.com/zxeenu/home-server-setup.git
-cd home-server-setup
+git clone https://github.com/zxeenu/home-server.git
+
+cd home-server
 ```
 
 Run the setup script:
 
 ```bash
 chmod +x scripts/setup.sh
+
 sudo ./scripts/setup.sh
 ```
 
@@ -591,7 +681,6 @@ PUID=1000
 PGID=1000
 
 PIHOLE_PASSWORD=...
-
 SMB_USER=media
 SMB_PASSWORD=...
 
@@ -639,6 +728,7 @@ Minecraft is deployed separately:
 
 ```bash
 cd subsetup/minecraft
+
 docker compose up -d
 ```
 
@@ -646,6 +736,7 @@ The Minecraft Tailscale sidecar is deployed from:
 
 ```bash
 cd subsetup/minecraft-tailscale
+
 docker compose up -d
 ```
 
@@ -798,13 +889,14 @@ Normal access is provided through:
 LAN
  │
  ├── Pi-hole DNS
+ │
  └── Traefik HTTPS
 
 Remote device
  │
  └── Tailscale
-       │
-       └── Home network
+      │
+      └── Home network
 ```
 
 Tailscale provides the remote network path, while Traefik provides consistent HTTPS routing.
@@ -897,65 +989,6 @@ Because images are pinned by digest, updating the repository's Compose configura
 
 ---
 
-# GitHub Actions Deployment
-
-The GitHub Actions workflow is part of the infrastructure rather than an unrelated development convenience.
-
-The self-hosted runner runs directly on the home server and is assigned a dedicated label:
-
-```text
-eggbase-net
-```
-
-The deployment workflow targets:
-
-```yaml
-runs-on: [self-hosted, Linux, X64, eggbase-net]
-```
-
-This provides an explicit connection between:
-
-```text
-GitHub repository
-        ↓
-GitHub Actions
-        ↓
-eggbase-net runner
-        ↓
-Home server
-        ↓
-Docker Compose
-```
-
-The runner can therefore apply infrastructure changes without exposing Docker's management interface to the public internet.
-
-### Runner troubleshooting
-
-Check the runner service:
-
-```bash
-sudo systemctl status "$(cat .service)"
-```
-
-View recent logs:
-
-```bash
-sudo journalctl -u "$(cat .service)" -n 50 --no-pager
-```
-
-Check that the runner is online in GitHub and that its labels match the workflow's `runs-on` configuration.
-
-If a workflow remains queued, verify:
-
-1. The runner service is running.
-2. The runner is online in GitHub.
-3. The runner has the expected labels.
-4. The workflow requests those exact labels.
-5. The runner has permission to access Docker.
-6. The repository checkout directory is correct.
-
----
-
 # Project Philosophy
 
 This project intentionally uses Docker Compose rather than Kubernetes.
@@ -979,6 +1012,14 @@ The result is a relatively small infrastructure stack that still provides many o
 
 ---
 
+# TODO
+
+* Setup secrets management
+* Improve disaster-recovery automation
+* Test full server restoration from backup
+
+---
+
 # License
 
 MIT — do whatever you want with it.
@@ -993,14 +1034,18 @@ If you fork the repository, replace the environment-specific values in `.env.exa
 
 ---
 
-## Repository
+# Repository
 
 GitHub:
 
 ```text
-https://github.com/zxeenu/home-server-setup
+https://github.com/zxeenu/home-server
 ```
 
-The repository is the source of truth for the infrastructure configuration.
+The public repository is the source of truth for the publicly documented infrastructure configuration.
 
-**How was this generated:** CHAT GPT, blame him
+The private operational repository is used for trusted automated deployment through the self-hosted GitHub Actions runner.
+
+---
+
+**How was this generated:** CHAT GPT, blame him.
