@@ -76,6 +76,11 @@ services:
       - kuma.homepage.http.url=https://home.${DOMAIN_NAME}
       - kuma.homepage.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
 
   # ---------------- Traefik reverse proxy (handles all HTTPS) ----------------
   traefik:
@@ -128,6 +133,11 @@ services:
       - kuma.traefik.http.accepted_statuscodes=["200","401"]   # basic auth returns 401
       - kuma.traefik.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
   # ---------------- Docker management UI ----------------
   portainer:
@@ -147,6 +157,11 @@ services:
       - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
       - kuma.portainer.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 384M
 
   # ---------------- DNS / ad-blocking ----------------
   pihole:
@@ -203,6 +218,11 @@ services:
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
   # ---------------- Media server ----------------
   # Currently running:
@@ -234,6 +254,11 @@ services:
       - kuma.plex.http.url=https://plex.${DOMAIN_NAME}
       - kuma.plex.http.accepted_statuscodes=["200","302","401"]   # Plex may redirect
       - kuma.plex.http.notification_name_list=["ntfy-uptime"]
+    deploy:
+      resources:
+        limits:
+          cpus: '3.00'
+          memory: 3G
 
   # ---------------- Torrent client ----------------
   # Currently running:
@@ -271,6 +296,11 @@ services:
       - kuma.torrent.http.url=https://torrent.${DOMAIN_NAME}
       - kuma.torrent.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.50'
+          memory: 1.5G
 
   # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
   stirlingpdf:
@@ -294,6 +324,11 @@ services:
       - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
       - kuma.pdf.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 768M
 
   # ---------------- Ebook library & web reader ----------------
   # Calibre-Web NextGen
@@ -320,6 +355,11 @@ services:
       - kuma.books.http.url=https://books.${DOMAIN_NAME}
       - kuma.books.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
 
   # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
   ntfy:
@@ -355,6 +395,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
 
   # ---------------- Indexer manager (disabled - uncomment to enable automation) ----------------
   # If you enable this, also add "${SERVER_IP} prowlarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
@@ -375,6 +420,11 @@ services:
   #     - traefik.http.services.prowlarr.loadbalancer.server.port=9696
   #     # AutoKuma monitor (commented out, but you could add it later)
   #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.50'
+  #         memory: 384M
 
   # ---------------- TV automation (disabled - uncomment to enable automation) ----------------
   # If you enable this, also add "${SERVER_IP} sonarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
@@ -396,6 +446,11 @@ services:
   #     - traefik.http.routers.sonarr.tls.certresolver=cloudflare
   #     - traefik.http.services.sonarr.loadbalancer.server.port=8989
   #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.75'
+  #         memory: 512M
 
   # ---------------- Movie automation (disabled - uncomment to enable automation) ----------------
   # If you enable this, also add "${SERVER_IP} radarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
@@ -417,6 +472,11 @@ services:
   #     - traefik.http.routers.radarr.tls.certresolver=cloudflare
   #     - traefik.http.services.radarr.loadbalancer.server.port=7878
   #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.75'
+  #         memory: 512M
 
   # ---------------- Network file share (browse & clean up media over LAN) ----------------
   samba:
@@ -433,6 +493,11 @@ services:
       -u "${SMB_USER};${SMB_PASSWORD}"
       -s "media;/media;yes;no;no;${SMB_USER}"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
   # ---------------- Tailscale (remote access via WireGuard mesh VPN) ----------------
   tailscale:
@@ -451,6 +516,11 @@ services:
       - NET_ADMIN
       - NET_RAW
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
 
   # ---------------- Uptime Kuma (Status of all the services) ----------------
   uptime-kuma:
@@ -474,6 +544,11 @@ services:
       - kuma.ntfy-uptime.notification.active=true
       - kuma.ntfy-uptime.notification.config={"type":"ntfy","ntfyserverurl":"https://ntfy.${DOMAIN_NAME}","ntfytopic":"${NTFY_UPTIME_KUMA_TOPIC}","ntfyPriority":5,"ntfyAuthenticationMethod":"none"}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
 
   # ---------------- AutoKuma (automatic monitor creation from Docker labels) ----------------
   autokuma:
@@ -488,6 +563,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${APPDATA}/autokuma:/data
     # No labels needed – AutoKuma ignores itself by default
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
 networks:
   default:
