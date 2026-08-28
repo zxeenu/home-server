@@ -171,7 +171,7 @@ services:
     environment:
       TZ: ${TZ}
       FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
-      FTLCONF_dns_listeningMode: local # options: all, local
+      FTLCONF_dns_listeningMode: all # options: all, local
       FTLCONF_dns_hosts: |
         ${SERVER_IP} home.${DOMAIN_NAME}
         ${SERVER_IP} traefik.${DOMAIN_NAME}
