@@ -1,0 +1,39 @@
+name: Deploy Home Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64, eggbase-net]
+
+    steps:
+      - name: Show runner location
+        run: |
+          echo "Runner working directory:"
+          pwd
+          echo
+          echo "Directory contents:"
+          ls -la
+          echo
+          echo "Runner user:"
+          whoami
+
+      # - name: Checkout
+      #   uses: actions/checkout@v4
+
+      # - name: Show checkout location
+      #   run: |
+      #     echo "Checkout directory:"
+      #     pwd
+      #     echo
+      #     echo "Checkout contents:"
+      #     ls -la
+
+      # - name: Validate Compose configuration
+      #   run: docker compose config
+
+      # - name: Deploy
+      #   run: docker compose up -d --remove-orphans
