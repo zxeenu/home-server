@@ -10,5 +10,40 @@ jobs:
     runs-on: [self-hosted, Linux, X64, eggbase-net]
 
     steps:
+      - name: Check runner environment
+        run: |
+          echo "==> Runner user"
+          whoami
+          echo
+
+          echo "==> HOME"
+          echo "$HOME"
+          echo
+
+          echo "==> Current working directory"
+          pwd
+          echo
+
+          echo "==> Home directory contents"
+          ls -la "$HOME"
+          echo
+
+          echo "==> Home server directory"
+          if [ -d "$HOME/home-server" ]; then
+            ls -la "$HOME/home-server"
+          else
+            echo "ERROR: $HOME/home-server does not exist"
+            exit 1
+          fi
+          echo
+
+          echo "==> Deployment script"
+          if [ -f "$HOME/home-server/scripts/deploy.sh" ]; then
+            ls -l "$HOME/home-server/scripts/deploy.sh"
+          else
+            echo "ERROR: deploy.sh does not exist"
+            exit 1
+          fi
+
       - name: Deploy
         run: ~/home-server/scripts/deploy.sh
