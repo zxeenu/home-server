@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Show runner location
         run: |
-          echo "Runner working directory:"
+          echo "Runner working directory: "
           pwd
           echo
           echo "Directory contents:"
