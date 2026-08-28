@@ -76,11 +76,11 @@ services:
       - kuma.homepage.http.url=https://home.${DOMAIN_NAME}
       - kuma.homepage.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.25'
-    #       memory: 64M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
 
   # ---------------- Traefik reverse proxy (handles all HTTPS) ----------------
   traefik:
