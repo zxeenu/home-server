@@ -1,112 +1,265 @@
-# Home Server Network Architecture
+# Home Server Architecture
 
-## Overview
-
-This home server runs Ubuntu Server with Docker Compose and hosts multiple services.
-
-The network has several layers:
-
-* Home router — DHCP and internet gateway
-* Pi-hole — DNS and ad blocking
-* Docker — application containers
-* Nginx Proxy Manager — HTTP/HTTPS reverse proxy
-* Main Tailscale — remote access to the home LAN and services
-* Minecraft Tailscale — dedicated Tailscale endpoint for Minecraft
-* `eggbase.net` — internal service domain
-* Home LAN — normal local access
-
-The important architectural feature is that Minecraft has **two Tailscale access paths**:
-
-1. Through the main Tailscale node via the advertised LAN subnet.
-2. Directly through its own Tailscale sidecar at `100.72.36.23`.
+**Document Version:** 2.0
+**Last Updated:** 29 August 2026
+**How was this generated:** CHAT GPT, blame him
 
 ---
 
-# 0. Quick Look
+# 1. Overview
+
+This home server runs **Ubuntu Server** with Docker Compose and provides a collection of self-hosted services.
+
+The architecture is built around several distinct layers:
+
+* **Home Router** — Internet gateway and DHCP
+* **Pi-hole** — DNS resolution, local DNS records, and ad blocking
+* **Traefik** — HTTPS reverse proxy and automatic certificate management
+* **Docker** — Application isolation and service networking
+* **Tailscale** — Remote access without exposing services directly to the Internet
+* **GitHub Actions** — Automated deployment
+* **Self-hosted GitHub Actions Runner** — Executes deployments directly on the server
+* **Uptime Kuma** — Service monitoring
+* **AutoKuma** — Automatically creates and manages Uptime Kuma monitors from Docker labels
+* **ntfy** — Push notification transport
+* **Cloudflare** — DNS provider used by Traefik for ACME DNS-01 certificate challenges
+* **`eggbase.net`** — Consistent hostname namespace for home services
+
+The server currently hosts:
+
+* Homepage
+* Traefik
+* Portainer
+* Pi-hole
+* Plex
+* qBittorrent
+* Stirling PDF
+* Calibre-Web NextGen
+* ntfy
+* Samba
+* Uptime Kuma
+* AutoKuma
+* Tailscale
+* Minecraft
+* Minecraft Tailscale sidecar
+
+The architecture intentionally avoids Kubernetes. Docker Compose provides the required service orchestration while remaining relatively simple to understand and maintain.
+
+---
+
+# 2. Architectural Model
+
+The server can be understood as four major planes:
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                    USER ACCESS PATHS                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  LOCAL LAN          MAIN TAILSCALE      MINECRAFT TAILSCALE │
-│  ┌─────────┐        ┌──────────┐        ┌──────────────┐   │
-│  │ Browser │        │ Remote   │        │ Remote       │   │
-│  │         │        │ Device   │        │ Player       │   │
-│  └────┬────┘        └────┬─────┘        └──────┬───────┘   │
-│       │                  │                      │           │
-│       ▼                  ▼                      ▼           │
-│  ┌───────────────────────────────────────────────────────┐  │
-│  │               HOME SERVER (Ubuntu)                   │  │
-│  │  ┌────────────────────────────────────────────────┐  │  │
-│  │  │              DOCKER COMPOSE                   │  │  │
-│  │  │  Pi-hole → NPM → Services (Plex, etc.)       │  │  │
-│  │  │  Main Tailscale → LAN subnet advertise        │  │  │
-│  │  │  Minecraft + Tailscale sidecar (100.72.36.23)│  │  │
-│  │  └────────────────────────────────────────────────┘  │  │
-│  └───────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                       CONTROL PLANE                        │
+│                                                            │
+│ GitHub → GitHub Actions → Self-hosted Runner → Docker      │
+│                                                            │
+│ Automated deployment and server configuration              │
+└──────────────────────────────┬─────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────┐
+│                       SERVICE PLANE                        │
+│                                                            │
+│ Docker Compose                                             │
+│                                                            │
+│ Traefik / Pi-hole / Plex / Portainer / qBittorrent / etc. │
+└──────────────────────────────┬─────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────┐
+│                        ACCESS PLANE                        │
+│                                                            │
+│ LAN / DNS / HTTPS / Tailscale / Minecraft Tailscale       │
+└──────────────────────────────┬─────────────────────────────┘
+                               │
+                               ▼
+┌────────────────────────────────────────────────────────────┐
+│                   OBSERVABILITY PLANE                      │
+│                                                            │
+│ Uptime Kuma ← AutoKuma ← Docker labels                    │
+│       │                                                    │
+│       ▼                                                    │
+│     ntfy → Push notifications                             │
+└────────────────────────────────────────────────────────────┘
+```
+
+This separation is useful because deployment, service execution, user access, and monitoring are different concerns.
+
+---
+
+# 3. Quick Architecture
+
+```text
+                         INTERNET
+                            │
+                            │
+                     ┌──────▼──────┐
+                     │ HOME ROUTER │
+                     │             │
+                     │ Gateway     │
+                     │ DHCP        │
+                     └──────┬──────┘
+                            │
+                         HOME LAN
+                            │
+          ┌─────────────────┼─────────────────┐
+          │                 │                 │
+          ▼                 ▼                 ▼
+     LAN DEVICES       UBUNTU SERVER      OTHER DEVICES
+                           │
+                           │
+                ┌──────────▼──────────┐
+                │       PI-HOLE       │
+                │                     │
+                │ DNS + Ad Blocking   │
+                │ Local DNS Records   │
+                └──────────┬──────────┘
+                           │
+                           │ *.eggbase.net
+                           ▼
+                ┌──────────────────────┐
+                │       TRAEFIK        │
+                │                      │
+                │ HTTP :80             │
+                │ HTTPS :443           │
+                │ Cloudflare DNS-01    │
+                └──────────┬───────────┘
+                           │
+             ┌─────────────┼──────────────┐
+             │             │              │
+             ▼             ▼              ▼
+         Homepage      Portainer        ntfy
+         Plex          qBittorrent      PDF
+         Calibre-Web   etc.
+             │
+             ▼
+        Docker Services
+
+
+      ┌─────────────────────────────────────────┐
+      │             CONTROL PLANE               │
+      │                                         │
+      │ GitHub → Actions → Self-hosted Runner  │
+      │                         │               │
+      │                         ▼               │
+      │                   Docker Compose        │
+      └─────────────────────────────────────────┘
+
+
+      ┌─────────────────────────────────────────┐
+      │              REMOTE ACCESS              │
+      │                                         │
+      │ Main Tailscale → LAN subnet             │
+      │ Minecraft Tailscale → Minecraft only    │
+      └─────────────────────────────────────────┘
+
+
+      ┌─────────────────────────────────────────┐
+      │             OBSERVABILITY               │
+      │                                         │
+      │ Docker labels → AutoKuma → Kuma → ntfy │
+      └─────────────────────────────────────────┘
 ```
 
 ---
 
-# 1. High-Level Network
+# 4. Home Router
+
+The home router provides the primary network gateway.
+
+Responsibilities:
+
+* Internet connectivity
+* DHCP
+* Local LAN connectivity
+* Default gateway
+
+The router's DHCP configuration provides clients with the Ubuntu server's Pi-hole instance as their DNS server.
 
 ```text
-                                      INTERNET
-                                         │
-                                         │
-                              ┌──────────▼──────────┐
-                              │     HOME ROUTER     │
-                              │                     │
-                              │  Internet Gateway   │
-                              │  DHCP Server        │
-                              │  DNS → Pi-hole      │
-                              └──────────┬──────────┘
-                                         │
-                                         │ HOME LAN
-                                         │
-              ┌──────────────────────────┼───────────────────────────┐
-              │                          │                           │
-              │                          │                           │
-        LAN DEVICES                UBUNTU SERVER                OTHER DEVICES
-        ┌───────────┐              ┌─────────────┐              ┌───────────┐
-        │ PC        │              │ Docker Host │              │ TV        │
-        │ Laptop    │              │             │              │ Phone     │
-        │ Phone     │              │ Home Server │              │ Console   │
-        └───────────┘              └─────────────┘              └───────────┘
+HOME ROUTER
+    │
+    ├── Internet Gateway
+    │
+    └── DHCP
+          │
+          ├── IP address
+          ├── Gateway
+          └── DNS → Pi-hole
 ```
+
+No individual device should normally require manual DNS configuration.
 
 ---
 
-# 2. Router and DHCP
+# 5. Network Access Model
 
-The home router provides DHCP to LAN clients.
+There are three primary ways services can be accessed.
 
-The router's DHCP configuration tells clients to use the **Ubuntu server's Pi-hole instance as their DNS server**.
+## 5.1 Local LAN
 
 ```text
-                         HOME ROUTER
-                              │
-                     ┌────────┴────────┐
-                     │                 │
-                  DHCP              Internet
-                     │
-                     ▼
-              LAN DEVICES
-                     │
-                     │ DNS server
-                     ▼
-                  PI-HOLE
+LAN DEVICE
+    │
+    ▼
+HOME LAN
+    │
+    ▼
+SERVER
 ```
 
-This means clients automatically receive Pi-hole as their DNS resolver when they connect to the home network.
-
-No manual DNS configuration is required on each device.
+Local devices can resolve `*.eggbase.net` through Pi-hole and connect to the server over the LAN.
 
 ---
 
-# 3. Pi-hole DNS
+## 5.2 Main Tailscale
+
+```text
+REMOTE DEVICE
+      │
+      │ Tailscale
+      ▼
+MAIN TAILSCALE
+      │
+      │ advertised LAN subnet
+      ▼
+HOME LAN
+      │
+      ▼
+SERVER / SERVICES
+```
+
+The main Tailscale node advertises the home LAN subnet, allowing authorized Tailscale devices to access services as though they were connected to the home network.
+
+---
+
+## 5.3 Minecraft Tailscale
+
+Minecraft has a dedicated Tailscale endpoint.
+
+```text
+REMOTE PLAYER
+      │
+      │ Tailscale
+      ▼
+MINECRAFT TAILSCALE
+      │
+      ▼
+100.72.36.23
+      │
+      ▼
+MINECRAFT
+```
+
+This provides a direct Tailscale path to Minecraft independent of the main LAN subnet route.
+
+---
+
+# 6. DNS Architecture
 
 Pi-hole provides:
 
@@ -122,178 +275,231 @@ TCP 53
 UDP 53
 ```
 
-The Pi-hole web interface is also exposed directly on:
+The important architectural distinction is:
 
 ```text
-http://<SERVER_IP>:8081
+DNS
+ │
+ └── hostname → server LAN IP
 ```
 
-## Local DNS Records
+DNS does **not** decide which Docker container receives the request.
 
-The current local records point service domains to the server's LAN IP:
+For example:
 
 ```text
-home.eggbase.net       → SERVER_IP
-proxy.eggbase.net      → SERVER_IP
-portainer.eggbase.net  → SERVER_IP
-pihole.eggbase.net     → SERVER_IP
-plex.eggbase.net       → SERVER_IP
-torrent.eggbase.net    → SERVER_IP
-files.eggbase.net      → SERVER_IP
-pdf.eggbase.net        → SERVER_IP
-books.eggbase.net      → SERVER_IP
-ntfy.eggbase.net       → SERVER_IP
-minecraft.eggbase.net  → SERVER_IP
+plex.eggbase.net
+        │
+        ▼
+     Pi-hole
+        │
+        ▼
+    SERVER_IP
 ```
 
-The important point is that DNS does **not** directly select the Docker container. Except in the case of Plex and Nfty - which are exposed via IP. 
-
-It simply sends the hostname to the server.
-
-Nginx Proxy Manager then decides where the request goes.
-
----
-
-# 4. DNS Request Flow
-
-For example, when a device requests:
-
-```text
-https://plex.eggbase.net
-```
-
-the flow is:
-
-```text
-DEVICE
-  │
-  │ DNS query:
-  │ "Where is plex.eggbase.net?"
-  ▼
-HOME ROUTER
-  │
-  │ DHCP-provided DNS server
-  ▼
-PI-HOLE
-  │
-  │ Local DNS record
-  │ plex.eggbase.net → SERVER_IP
-  ▼
-SERVER_IP
-```
-
-The browser then connects to:
+The browser then connects to the server on HTTPS:
 
 ```text
 SERVER_IP:443
 ```
 
+Traefik subsequently determines which service receives the request.
+
 ---
 
-# 5. Nginx Proxy Manager
+# 7. Local DNS Records
 
-Nginx Proxy Manager is the reverse proxy.
-
-It listens on:
+The current service namespace is:
 
 ```text
-80  → HTTP
-443 → HTTPS
-81  → NPM administration
+home.eggbase.net
+traefik.eggbase.net
+portainer.eggbase.net
+pihole.eggbase.net
+plex.eggbase.net
+torrent.eggbase.net
+files.eggbase.net
+pdf.eggbase.net
+books.eggbase.net
+ntfy.eggbase.net
+minecraft.eggbase.net
+status.eggbase.net
 ```
 
-The admin interface is available directly at:
-
-```text
-http://<SERVER_IP>:81
-```
-
-NPM receives HTTPS requests and routes them to the appropriate Docker service.
+These resolve internally through Pi-hole to the server's LAN IP.
 
 Conceptually:
 
 ```text
-                         SERVER_IP:443
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │ NGINX PROXY MANAGER │
-                    └──────────┬──────────┘
-                               │
-             ┌─────────────────┼─────────────────┐
-             │                 │                 │
-             ▼                 ▼                 ▼
-          Plex             Homepage            ntfy
-        :32400               :80                :80
+*.eggbase.net
+      │
+      ▼
+   Pi-hole
+      │
+      ▼
+ SERVER_IP
 ```
 
 ---
 
-# 6. HTTPS
+# 8. DNS Request Flow
 
-The public/internal service domain is:
-
-```text
-eggbase.net
-```
-
-The service hostnames are under:
-
-```text
-*.eggbase.net
-```
-
-Nginx Proxy Manager handles the HTTPS certificates and reverse proxying.
-
-The intended architecture is:
+When a device requests:
 
 ```text
 https://plex.eggbase.net
-        │
-        ▼
-      HTTPS
-        │
-        ▼
-Nginx Proxy Manager
-        │
-        ▼
-     plex:32400
 ```
 
-The same pattern can be used for the other services.
+the process is:
+
+```text
+DEVICE
+  │
+  │ DNS query
+  ▼
+PI-HOLE
+  │
+  │ local DNS record
+  ▼
+SERVER_IP
+  │
+  │ HTTPS :443
+  ▼
+TRAEFIK
+  │
+  │ hostname routing
+  ▼
+PLEX
+```
 
 ---
 
-# 7. Docker Network
+# 9. Docker Architecture
 
-Most containers use the Docker network:
+Docker provides the primary application isolation layer.
+
+Most application containers use:
 
 ```text
 home-server-net
 ```
 
-The application containers communicate with one another using Docker DNS/container names.
+Docker's internal DNS allows containers on the same network to communicate using service/container names.
 
 For example:
 
 ```text
-Nginx Proxy Manager
-        │
-        ├──► homepage:80
-        ├──► plex:32400
-        ├──► qbittorrent:8080
-        ├──► stirlingpdf:8080
-        ├──► calibreweb:8083
-        └──► ntfy:80
+Traefik
+   │
+   ├── homepage:80
+   ├── portainer:9000
+   ├── qbittorrent:8080
+   ├── stirlingpdf:8080
+   ├── calibreweb:8083
+   ├── ntfy:80
+   └── uptime-kuma:3001
 ```
 
-Docker container names therefore act as internal service addresses.
+This means services do not need to know each other's LAN IP addresses.
 
 ---
 
-# 8. Services
+# 10. Traefik Reverse Proxy
 
-## Homepage
+Traefik is the current reverse proxy.
+
+It replaces the previous Nginx Proxy Manager architecture.
+
+Traefik listens on:
+
+```text
+80  → HTTP
+443 → HTTPS
+```
+
+The HTTP entrypoint redirects to HTTPS.
+
+```text
+HTTP :80
+   │
+   ▼
+HTTPS :443
+```
+
+Traefik discovers Docker services through Docker labels.
+
+For example:
+
+```yaml
+labels:
+  - traefik.enable=true
+  - traefik.http.routers.homepage.rule=Host(`home.${DOMAIN_NAME}`)
+  - traefik.http.routers.homepage.entrypoints=websecure
+  - traefik.http.routers.homepage.tls.certresolver=cloudflare
+  - traefik.http.services.homepage.loadbalancer.server.port=80
+```
+
+The hostname determines the router, while the service definition determines the Docker container and port.
+
+---
+
+# 11. HTTPS and Cloudflare DNS-01
+
+Traefik manages Let's Encrypt certificates using the Cloudflare DNS-01 challenge.
+
+The architecture is:
+
+```text
+Traefik
+   │
+   │ ACME request
+   ▼
+Let's Encrypt
+   │
+   │ DNS-01 challenge
+   ▼
+Cloudflare DNS
+```
+
+The Cloudflare API token is provided to Traefik using:
+
+```text
+CF_DNS_API_TOKEN
+```
+
+DNS-01 is important because certificate validation does not require exposing port 80 or 443 publicly.
+
+The home router therefore does not need inbound port forwarding for HTTPS.
+
+Certificates are stored persistently in:
+
+```text
+/etc/traefik/acme.json
+```
+
+which is backed by the host's Traefik application-data directory.
+
+---
+
+# 12. No Public Inbound Access
+
+The intended security model is:
+
+```text
+INTERNET
+   │
+   │ no inbound port forwarding
+   X
+HOME ROUTER
+```
+
+Remote access is provided through Tailscale rather than direct Internet exposure.
+
+Cloudflare is used for DNS-based certificate validation, not as a requirement for routing Internet traffic into the home network.
+
+---
+
+# 13. Homepage
 
 Container:
 
@@ -307,54 +513,33 @@ Image:
 nginx:alpine
 ```
 
-Port:
+The container serves a static dashboard.
+
+Files mounted into the container include:
 
 ```text
-8888:80
+index.html
+services.json
 ```
 
-Direct fallback:
-
-```text
-http://<SERVER_IP>:8888
-```
-
-It serves the static home dashboard.
-
-It can also be accessed through:
+The dashboard is available through:
 
 ```text
 https://home.eggbase.net
 ```
 
----
-
-## Nginx Proxy Manager
-
-Container:
+Traefik routes:
 
 ```text
-nginxproxymanager
+home.eggbase.net
+        │
+        ▼
+homepage:80
 ```
-
-Ports:
-
-```text
-80:80
-443:443
-81:81
-```
-
-Responsibilities:
-
-* Reverse proxy
-* HTTPS
-* Certificate management
-* Domain-based routing
 
 ---
 
-## Portainer
+# 14. Portainer
 
 Container:
 
@@ -365,24 +550,31 @@ portainer
 Port:
 
 ```text
-9000:9000
+9000
 ```
 
-Direct fallback:
+Portainer provides Docker management functionality.
 
-```text
-http://<SERVER_IP>:9000
-```
-
-Domain:
+The primary access path is:
 
 ```text
 https://portainer.eggbase.net
 ```
 
+Traefik routes:
+
+```text
+portainer.eggbase.net
+        │
+        ▼
+portainer:9000
+```
+
+Portainer has access to the Docker socket and should therefore be considered a highly privileged service.
+
 ---
 
-## Pi-hole
+# 15. Pi-hole
 
 Container:
 
@@ -390,29 +582,31 @@ Container:
 pihole
 ```
 
+Responsibilities:
+
+* DNS
+* Ad blocking
+* Local DNS
+* Internal service hostname resolution
+
 Ports:
 
 ```text
 53:53/tcp
 53:53/udp
-8081:80
 ```
 
-Responsibilities:
-
-* DNS
-* Ad blocking
-* Local DNS records
-
-Direct web interface:
+The web interface is routed through Traefik:
 
 ```text
-http://<SERVER_IP>:8081/admin
+https://pihole.eggbase.net
 ```
+
+Pi-hole is also directly responsible for resolving the internal `eggbase.net` hostnames.
 
 ---
 
-## Plex
+# 16. Plex
 
 Container:
 
@@ -420,15 +614,31 @@ Container:
 plex
 ```
 
-Network mode:
+Plex intentionally uses:
 
 ```text
-host
+network_mode: host
 ```
 
-This is intentional for Plex discovery/DLNA.
+This is used to simplify Plex discovery and DLNA functionality.
 
-Libraries:
+Plex therefore differs from most application containers.
+
+Instead of being reached through normal Docker-network service discovery, it is reached through the host network.
+
+Traefik uses a file-provider configuration to route:
+
+```text
+plex.eggbase.net
+        │
+        ▼
+SERVER / HOST NETWORK
+        │
+        ▼
+Plex :32400
+```
+
+Plex has access to:
 
 ```text
 /movies
@@ -436,15 +646,9 @@ Libraries:
 /downloads
 ```
 
-Domain:
-
-```text
-https://plex.eggbase.net
-```
-
 ---
 
-## qBittorrent
+# 17. qBittorrent
 
 Container:
 
@@ -452,12 +656,17 @@ Container:
 qbittorrent
 ```
 
-Ports:
+Web interface:
 
 ```text
-8080:8080
-6881:6881
-6881:6881/udp
+8080
+```
+
+Torrent ports:
+
+```text
+6881/tcp
+6881/udp
 ```
 
 Storage:
@@ -467,15 +676,24 @@ Storage:
 /other
 ```
 
-Domain:
+The web interface is available through:
 
 ```text
 https://torrent.eggbase.net
 ```
 
+Traefik routes:
+
+```text
+torrent.eggbase.net
+        │
+        ▼
+qbittorrent:8080
+```
+
 ---
 
-## Stirling PDF
+# 18. Stirling PDF
 
 Container:
 
@@ -483,27 +701,38 @@ Container:
 stirlingpdf
 ```
 
-Port:
+Internal application port:
 
 ```text
-8082:8080
+8080
 ```
 
-Direct fallback:
-
-```text
-http://<SERVER_IP>:8082
-```
-
-Domain:
+Primary hostname:
 
 ```text
 https://pdf.eggbase.net
 ```
 
+Stirling PDF provides functionality such as:
+
+* PDF merging
+* PDF splitting
+* OCR
+* Conversion
+* Compression
+* Other PDF manipulation
+
+Persistent data includes:
+
+```text
+trainingData
+config
+logs
+```
+
 ---
 
-## Calibre-Web
+# 19. Calibre-Web NextGen
 
 Container:
 
@@ -511,13 +740,13 @@ Container:
 calibreweb
 ```
 
-Port:
+Application port:
 
 ```text
-8083:8083
+8083
 ```
 
-Domain:
+Primary hostname:
 
 ```text
 https://books.eggbase.net
@@ -526,12 +755,22 @@ https://books.eggbase.net
 Library:
 
 ```text
-/books
+/calibre-library
 ```
+
+Book ingestion:
+
+```text
+/cwa-book-ingest
+```
+
+The service provides the ebook library and web reader.
+
+Kobo synchronization is supported by the current configuration.
 
 ---
 
-## ntfy
+# 20. ntfy
 
 Container:
 
@@ -539,19 +778,13 @@ Container:
 ntfy
 ```
 
-Port:
+Internal port:
 
 ```text
-8084:80
+80
 ```
 
-Direct fallback:
-
-```text
-http://<SERVER_IP>:8084
-```
-
-Domain:
+Primary hostname:
 
 ```text
 https://ntfy.eggbase.net
@@ -560,13 +793,27 @@ https://ntfy.eggbase.net
 ntfy provides:
 
 * Push notifications
-* HTTP publishing
+* HTTP notification publishing
 * Web subscriptions
-* Application event notifications
+* Application notifications
+
+The service is also used as the notification transport for Uptime Kuma.
+
+The important architectural relationship is:
+
+```text
+Application / Monitoring
+        │
+        ▼
+       ntfy
+        │
+        ▼
+     Phone
+```
 
 ---
 
-## Samba
+# 21. Samba
 
 Container:
 
@@ -581,9 +828,7 @@ Ports:
 445:445
 ```
 
-The media directory is exposed over SMB.
-
-Conceptually:
+Samba exposes the media directory over SMB.
 
 ```text
 LAN DEVICE
@@ -593,55 +838,175 @@ LAN DEVICE
 SERVER:445
     │
     ▼
-Samba
+SAMBA
     │
     ▼
 /media
 ```
 
+SMB is not routed through Traefik because Traefik handles HTTP/HTTPS traffic rather than SMB.
+
 ---
 
-# 9. Main Tailscale
+# 22. Uptime Kuma
 
-There are **two Tailscale containers**.
+Container:
 
-The first is the general-purpose home-server Tailscale instance:
+```text
+uptime-kuma
+```
+
+Internal port:
+
+```text
+3001
+```
+
+Primary hostname:
+
+```text
+https://status.eggbase.net
+```
+
+Uptime Kuma provides service monitoring.
+
+It monitors HTTP and DNS endpoints and tracks service availability.
+
+The monitoring architecture is:
+
+```text
+                 UPTIME KUMA
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+      Homepage     Traefik     Pi-hole
+          │           │           │
+          ▼           ▼           ▼
+      qBittorrent   Plex       ntfy
+          │
+          ▼
+       etc.
+```
+
+---
+
+# 23. AutoKuma
+
+AutoKuma automates Uptime Kuma configuration.
+
+Instead of manually creating every monitor in the Uptime Kuma UI, services define their monitoring configuration using Docker labels.
+
+For example:
+
+```yaml
+labels:
+  - kuma.homepage.http.name=Homepage
+  - kuma.homepage.http.url=https://home.${DOMAIN_NAME}
+  - kuma.homepage.http.notification_name_list=["ntfy-uptime"]
+```
+
+AutoKuma observes the Docker environment and creates or updates the corresponding Uptime Kuma monitor.
+
+The resulting flow is:
+
+```text
+Docker labels
+      │
+      ▼
+   AutoKuma
+      │
+      ▼
+Uptime Kuma monitors
+```
+
+This makes monitoring part of the service configuration rather than a separate manual configuration task.
+
+---
+
+# 24. Monitoring Notifications
+
+The current architecture uses a single ntfy notification provider for service monitoring.
+
+The provider is managed by AutoKuma/Uptime Kuma and is named:
+
+```text
+ntfy-uptime
+```
+
+Service monitors reference it using:
+
+```text
+notification_name_list=["ntfy-uptime"]
+```
+
+The resulting flow is:
+
+```text
+SERVICE
+   │
+   │ failure
+   ▼
+Uptime Kuma
+   │
+   ▼
+ntfy
+   │
+   ▼
+PHONE
+```
+
+When the service recovers:
+
+```text
+SERVICE
+   │
+   │ recovery
+   ▼
+Uptime Kuma
+   │
+   ▼
+ntfy
+   │
+   ▼
+PHONE
+```
+
+The ntfy service itself is intentionally not configured to depend on its own notification provider. If ntfy is unavailable, it cannot deliver its own notification.
+
+---
+
+# 25. Monitoring Coverage
+
+Current monitored services include:
+
+```text
+Homepage
+Traefik
+Pi-hole DNS
+Pi-hole Web
+Plex
+qBittorrent
+Stirling PDF
+Calibre-Web
+ntfy
+Uptime Kuma
+```
+
+The monitoring configuration is attached to the containers through Docker labels.
+
+This allows a service's deployment configuration and monitoring configuration to remain together.
+
+---
+
+# 26. Main Tailscale
+
+The primary Tailscale container is:
 
 ```text
 tailscale
 ```
 
-This is the primary Tailscale node for the home server.
-
-It uses:
-
-```yaml
-TS_AUTHKEY: ${TS_AUTHKEY}
-TS_STATE_DIR: /var/lib/tailscale
-TS_EXTRA_ARGS: --advertise-routes=${LAN_SUBNET} --accept-dns=false
-```
-
-It also has:
-
-```yaml
-cap_add:
-  - NET_ADMIN
-  - NET_RAW
-```
-
-and:
-
-```text
-/dev/net/tun
-```
-
-mounted.
-
----
-
-# 10. Main Tailscale Purpose
-
-The main Tailscale instance provides remote access to the home network.
+Its purpose is general-purpose remote access to the home network.
 
 It advertises:
 
@@ -649,78 +1014,142 @@ It advertises:
 LAN_SUBNET
 ```
 
-to the Tailscale network.
+using:
 
-Conceptually:
+```text
+--advertise-routes=${LAN_SUBNET}
+```
+
+DNS integration is disabled inside the container:
+
+```text
+--accept-dns=false
+```
+
+The node has access to:
+
+```text
+/dev/net/tun
+```
+
+and requires:
+
+```text
+NET_ADMIN
+NET_RAW
+```
+
+capabilities.
+
+---
+
+# 27. Main Tailscale Routing
+
+The main Tailscale path is:
 
 ```text
 REMOTE DEVICE
       │
       │ Tailscale
       ▼
-MAIN TAILSCALE
+HOME-SERVER TAILSCALE NODE
       │
       │ advertised LAN subnet
       ▼
 HOME LAN
       │
+      ├── Server
       ├── Pi-hole
-      ├── Nginx Proxy Manager
-      ├── Plex
-      ├── qBittorrent
       ├── Samba
       ├── Minecraft
-      └── other LAN services
+      └── other LAN devices/services
 ```
 
-This means Minecraft is already reachable through the **main Tailscale path**.
+The important property is that the main Tailscale node provides access to the LAN rather than merely exposing one Docker container.
 
 ---
 
-# 11. Minecraft Tailscale Sidecar
+# 28. Minecraft
 
-Minecraft has its own Tailscale sidecar:
+Minecraft runs separately from the main application stack.
+
+Container:
+
+```text
+minecraft
+```
+
+The Minecraft server exposes:
+
+```text
+25565/tcp
+19132/udp
+```
+
+The standard Minecraft services are:
+
+```text
+Java
+  :25565
+
+Bedrock
+  :19132/udp
+```
+
+Minecraft uses its own Docker network:
+
+```text
+minecraft-net
+```
+
+---
+
+# 29. Minecraft Tailscale Sidecar
+
+Minecraft has a dedicated Tailscale sidecar:
 
 ```text
 minecraft-tailscale
 ```
 
-It uses:
+The sidecar uses:
 
 ```yaml
 network_mode: "container:minecraft"
 ```
 
-This is the key part of the architecture.
-
-The Tailscale container shares Minecraft's network namespace.
+This causes the Tailscale container to share Minecraft's network namespace.
 
 Conceptually:
 
 ```text
-┌───────────────────────────────────────┐
-│       MINECRAFT NETWORK NAMESPACE     │
-│                                       │
-│   ┌──────────────┐                    │
-│   │  Minecraft   │                    │
-│   │              │                    │
-│   │ :25565       │                    │
-│   │ :19132/udp   │                    │
-│   └──────▲───────┘                    │
-│          │                            │
-│          │ shared network namespace   │
-│          │                            │
-│   ┌──────┴───────────────┐            │
-│   │ minecraft-tailscale  │            │
-│   │                       │            │
-│   │ tailscale0            │            │
-│   │ 100.72.36.23          │            │
-│   └───────────────────────┘            │
-│                                       │
-└───────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│       MINECRAFT NETWORK NAMESPACE    │
+│                                      │
+│  ┌──────────────┐                    │
+│  │  Minecraft   │                    │
+│  │              │                    │
+│  │ :25565       │                    │
+│  │ :19132/udp   │                    │
+│  └──────────────┘                    │
+│                                      │
+│  ┌──────────────────────────────┐    │
+│  │ minecraft-tailscale          │    │
+│  │                              │    │
+│  │ tailscale0                   │    │
+│  │ 100.72.36.23                 │    │
+│  └──────────────────────────────┘    │
+│                                      │
+└──────────────────────────────────────┘
 ```
 
-The Minecraft Tailscale node currently has:
+The sidecar therefore gives Minecraft its own Tailscale identity without requiring the entire Docker network to be exposed through that Tailscale node.
+
+---
+
+# 30. Minecraft Tailscale Address
+
+The dedicated Minecraft Tailscale endpoint currently uses:
 
 ```text
 IPv4:
@@ -730,11 +1159,25 @@ IPv6:
 fd7a:115c:a1e0::4b01:24d5
 ```
 
+Minecraft can therefore be reached directly through:
+
+```text
+100.72.36.23:25565
+```
+
+for Java Edition, and:
+
+```text
+100.72.36.23:19132
+```
+
+for Bedrock Edition.
+
 ---
 
-# 12. Why Minecraft Has Two Tailscale Paths
+# 31. Minecraft Has Two Tailscale Paths
 
-Minecraft can now be reached in two different ways through Tailscale.
+Minecraft intentionally has two independent Tailscale access paths.
 
 ## Path A — Main Tailscale
 
@@ -748,7 +1191,7 @@ MAIN TAILSCALE
 LAN SUBNET ROUTE
       │
       ▼
-MINECRAFT LAN IP
+SERVER LAN IP
       │
       ▼
 MINECRAFT
@@ -769,13 +1212,15 @@ MINECRAFT TAILSCALE
 MINECRAFT
 ```
 
-The second path does not depend on the LAN subnet route.
+The second path does not depend on the main LAN subnet route.
+
+This provides redundancy and a dedicated network identity for Minecraft.
 
 ---
 
-# 13. Minecraft Access
+# 32. Minecraft Access Summary
 
-Minecraft therefore has several possible access paths.
+Minecraft can therefore be accessed through:
 
 ### Local LAN
 
@@ -789,10 +1234,10 @@ SERVER LAN IP
 Minecraft
 ```
 
-### Remote via main Tailscale
+### Main Tailscale
 
 ```text
-REMOTE TAILSCALE DEVICE
+REMOTE DEVICE
     │
     ▼
 Main Tailscale
@@ -801,16 +1246,13 @@ Main Tailscale
 LAN subnet
     │
     ▼
-Server LAN IP
-    │
-    ▼
 Minecraft
 ```
 
-### Remote via dedicated Minecraft Tailscale
+### Dedicated Minecraft Tailscale
 
 ```text
-REMOTE TAILSCALE DEVICE
+REMOTE DEVICE
     │
     ▼
 Minecraft Tailscale
@@ -822,163 +1264,259 @@ Minecraft Tailscale
 Minecraft
 ```
 
-Java:
+---
+
+# 33. GitHub Actions Deployment
+
+The home server uses a **self-hosted GitHub Actions runner** to automate deployment.
+
+The repository contains the server's Docker Compose configuration and related deployment files.
+
+The deployment flow is:
 
 ```text
-100.72.36.23:25565
+DEVELOPER
+    │
+    │ git push
+    ▼
+GITHUB REPOSITORY
+    │
+    │ workflow trigger
+    ▼
+GITHUB ACTIONS
+    │
+    │ runner selection
+    ▼
+HOME SERVER
+    │
+    ▼
+SELF-HOSTED RUNNER
+    │
+    ▼
+DOCKER COMPOSE
+    │
+    ▼
+RUNNING SERVICES
 ```
 
-Bedrock:
-
-```text
-100.72.36.23:19132
-```
+This allows the home server to deploy changes without requiring a separate deployment machine.
 
 ---
 
-# 14. Complete Network Diagram
+# 34. Self-Hosted GitHub Actions Runner
+
+The GitHub Actions runner is installed directly on the Ubuntu host.
+
+It is registered as a self-hosted runner with labels:
 
 ```text
-                                      INTERNET
-                                         │
-                                         │
-                                         ▼
-                              ┌────────────────────┐
-                              │    HOME ROUTER     │
-                              │                    │
-                              │ Internet Gateway   │
-                              │ DHCP Server        │
-                              │ DNS → Pi-hole      │
-                              └─────────┬──────────┘
-                                        │
-                                        │
-                                  HOME LAN
-                                        │
-             ┌──────────────────────────┼──────────────────────────┐
-             │                          │                          │
-             ▼                          ▼                          ▼
-       LAN CLIENTS               UBUNTU SERVER              OTHER CLIENTS
-       ┌───────────┐             ┌────────────────┐           ┌───────────┐
-       │ PC        │             │                │           │ TV        │
-       │ Laptop    │             │ Docker Host    │           │ Phone     │
-       │ Phone     │             │                │           │ Console   │
-       └─────┬─────┘             └───────┬────────┘           └───────────┘
-             │                           │
-             │ DNS                       │
-             └──────────────────────────►│
-                                         │
-                              ┌──────────▼──────────┐
-                              │       PI-HOLE       │
-                              │                     │
-                              │ DNS :53             │
-                              │ Ad blocking         │
-                              │ Local DNS           │
-                              └──────────┬──────────┘
-                                         │
-                                         │ SERVER_IP
-                                         │
-                              ┌──────────▼──────────┐
-                              │ NGINX PROXY MANAGER │
-                              │                     │
-                              │ HTTP :80            │
-                              │ HTTPS :443          │
-                              │ Admin :81           │
-                              └──────────┬──────────┘
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    │                    │                    │
-                    ▼                    ▼                    ▼
-               Homepage                Plex                 ntfy
-               :80                    :32400                 :80
-                    │                    │                    │
-                    ├── Portainer        ├── qBittorrent      │
-                    ├── PDF              ├── Calibre-Web      │
-                    └── other services  └── other services   │
-
-
-                              ┌─────────────────────────────┐
-                              │          DOCKER              │
-                              │      home-server-net        │
-                              │                             │
-                              │ homepage                    │
-                              │ nginxproxymanager            │
-                              │ portainer                    │
-                              │ pihole                       │
-                              │ qbittorrent                  │
-                              │ stirlingpdf                  │
-                              │ calibreweb                   │
-                              │ ntfy                         │
-                              │ samba                        │
-                              │                             │
-                              └─────────────────────────────┘
-
-
-        ╔════════════════════════════════════════════════════════════╗
-        ║                       TAILSCALE                           ║
-        ╚════════════════════════════════════════════════════════════╝
-                              │
-                ┌─────────────┴─────────────┐
-                │                           │
-                ▼                           ▼
-       ┌─────────────────┐         ┌────────────────────┐
-       │  MAIN TAILSCALE │         │ MINECRAFT TAILSCALE│
-       │                 │         │                    │
-       │ home-server     │         │ minecraft sidecar  │
-       │ 100.x.x.x        │         │ 100.72.36.23       │
-       │                 │         │                    │
-       │ advertise       │         │ shared network     │
-       │ LAN_SUBNET      │         │ namespace with     │
-       │                 │         │ Minecraft          │
-       └────────┬────────┘         └─────────┬──────────┘
-                │                            │
-                │                            │
-                ▼                            ▼
-           HOME LAN                    MINECRAFT
-                │                            │
-                │                     ┌──────┴──────┐
-                │                     │             │
-                └────────────────────►│ Minecraft   │
-                                      │ :25565      │
-                                      │ :19132/udp  │
-                                      └─────────────┘
+self-hosted
+Linux
+X64
+eggbase-net
 ```
 
----
+Deployment workflows target it with:
 
-# 15. Domain and Service Routing
+```yaml
+runs-on: [self-hosted, Linux, X64, eggbase-net]
+```
 
-The intended service access pattern is:
+The custom:
 
-| Domain                  | Destination              |
-| ----------------------- | ------------------------ |
-| `home.eggbase.net`      | Homepage                 |
-| `proxy.eggbase.net`     | Nginx Proxy Manager      |
-| `portainer.eggbase.net` | Portainer                |
-| `pihole.eggbase.net`    | Pi-hole                  |
-| `plex.eggbase.net`      | Plex                     |
-| `torrent.eggbase.net`   | qBittorrent              |
-| `files.eggbase.net`     | Samba / file access (SMB)|
-| `pdf.eggbase.net`       | Stirling PDF             |
-| `books.eggbase.net`     | Calibre-Web              |
-| `ntfy.eggbase.net`      | ntfy                     |
-| `minecraft.eggbase.net` | Minecraft-related access |
+```text
+eggbase-net
+```
 
-Pi-hole resolves these domains to the server IP.
+label identifies this particular deployment target.
 
-Nginx Proxy Manager then routes HTTP/HTTPS requests to the appropriate service.
-SMB traffic is not proxied by NPM; clients connect directly via SMB protocol.
+This is useful if additional self-hosted runners are added in the future.
 
 ---
 
-# 16. Storage
+# 35. GitHub Actions Execution Model
 
-The server uses persistent application data under:
+The runner is installed on the host rather than inside Docker.
+
+Conceptually:
+
+```text
+┌─────────────────────────────────────────┐
+│             UBUNTU SERVER               │
+│                                         │
+│  systemd                                │
+│     │                                   │
+│     ▼                                   │
+│  GitHub Actions Runner                  │
+│     │                                   │
+│     │ shell commands                    │
+│     ▼                                   │
+│  Docker CLI                             │
+│     │                                   │
+│     ▼                                   │
+│  Docker Engine                          │
+│     │                                   │
+│     ▼                                   │
+│  Containers                             │
+└─────────────────────────────────────────┘
+```
+
+The runner therefore does not need to join `home-server-net`.
+
+It operates at the host/control-plane level.
+
+---
+
+# 36. Deployment Workflow
+
+The intended workflow is approximately:
+
+```text
+git push
+   │
+   ▼
+GitHub Actions
+   │
+   ▼
+Self-hosted runner
+   │
+   ▼
+Checkout repository
+   │
+   ▼
+Verify working directory
+   │
+   ▼
+Docker Compose
+   │
+   ├── pull images
+   │
+   └── recreate/start services
+   │
+   ▼
+Updated home server
+```
+
+Diagnostic commands such as:
+
+```bash
+pwd
+ls -la
+```
+
+can be used during deployment to verify that the workflow is operating in the expected GitHub Actions workspace.
+
+This is important because the runner's current working directory is the Actions workspace and should not be assumed to be the permanent server project directory.
+
+---
+
+# 37. Docker Image Pinning
+
+Running services use exact image digests rather than floating tags wherever practical.
+
+For example:
+
+```text
+image@sha256:<digest>
+```
+
+This prevents an unplanned image update from silently changing the deployed software.
+
+The intended update process is deliberate:
+
+```text
+Update desired
+      │
+      ▼
+docker compose pull
+      │
+      ▼
+Inspect new image digest
+      │
+      ▼
+Update Compose configuration
+      │
+      ▼
+Commit
+      │
+      ▼
+GitHub Actions deployment
+```
+
+This makes container updates reproducible and auditable.
+
+---
+
+# 38. Deployment and Runtime Separation
+
+The GitHub Actions runner belongs to the control plane.
+
+Docker containers belong to the service plane.
+
+The relationship is:
+
+```text
+                 GITHUB
+                    │
+                    ▼
+             GitHub Actions
+                    │
+                    ▼
+          Self-hosted Runner
+                    │
+                    │ Docker CLI
+                    ▼
+              Docker Engine
+                    │
+                    ▼
+             Docker Compose
+                    │
+                    ▼
+             Service Containers
+```
+
+The runner does not need to be exposed as a network service.
+
+---
+
+# 39. Runner Security Boundary
+
+The self-hosted runner is a highly trusted component.
+
+A runner capable of controlling Docker can effectively control the host's container environment.
+
+Therefore:
+
+```text
+Git repository
+      │
+      ▼
+GitHub Actions
+      │
+      ▼
+Self-hosted Runner
+      │
+      ▼
+Docker Engine
+```
+
+should be treated as a privileged trust chain.
+
+Changes merged into the deployment branch may result in commands being executed directly on the home server.
+
+The deployment repository should therefore be considered trusted infrastructure code.
+
+---
+
+# 40. Storage Architecture
+
+Persistent application data is stored under:
 
 ```text
 /srv/appdata
 ```
 
-and media/content under:
+Media and user content are stored under:
 
 ```text
 /srv/media
@@ -989,7 +1527,7 @@ Typical structure:
 ```text
 /srv/
 ├── appdata/
-│   ├── npm/
+│   ├── traefik/
 │   ├── portainer/
 │   ├── pihole/
 │   ├── plex/
@@ -997,256 +1535,821 @@ Typical structure:
 │   ├── stirlingpdf/
 │   ├── calibreweb/
 │   ├── ntfy/
-│   └── tailscale/
+│   ├── uptime-kuma/
+│   ├── autokuma/
+│   ├── tailscale/
+│   └── tailscale-minecraft/
 │
 └── media/
     ├── movies/
     ├── tv/
     ├── downloads/
     ├── other/
-    └── books/
+    ├── books/
+    └── calibreweb-ingest/
 ```
 
-Minecraft has its own persistent storage according to its Minecraft Compose configuration.
+Minecraft has its own persistent application directory.
 
-The Minecraft Tailscale sidecar stores its Tailscale state separately:
+---
+
+# 41. Storage Relationships
+
+Media-consuming applications use shared host directories.
+
+For example:
 
 ```text
-${APPDATA}/tailscale-minecraft
+qBittorrent
+    │
+    ▼
+/downloads
+    │
+    ├── Plex
+    └── other media workflows
 ```
 
----
-
-# 17. Security Boundaries
-
-There are several useful boundaries in this architecture.
-
-## LAN boundary
-
-Normal local devices access services over the home network.
-
-## HTTPS boundary
-
-Nginx Proxy Manager handles encrypted HTTP traffic and certificate management.
-
-## Docker boundary
-
-Services are isolated into containers.
-
-## Main Tailscale boundary
-
-Remote Tailscale devices can access the advertised home LAN.
-
-## Minecraft Tailscale boundary
-
-Minecraft has a dedicated Tailscale identity and IP.
-
-The Minecraft sidecar does not need to expose the entire Docker network through Tailscale.
-
----
-
-# 18. Key Architectural Principle
-
-The home server effectively uses four layers:
+Plex uses:
 
 ```text
-                    ┌─────────────────────┐
-                    │       USERS         │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │      TAILSCALE      │
-                    │ Remote connectivity │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │       NETWORK       │
-                    │ LAN + Docker        │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │       DNS           │
-                    │      Pi-hole        │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │   REVERSE PROXY     │
-                    │ Nginx Proxy Manager │
-                    └──────────┬──────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │      SERVICES       │
-                    │ Docker containers   │
-                    └─────────────────────┘
+/movies
+/tv
+/downloads
 ```
 
----
-
-# 19. Sidecar Pattern
-
-The Minecraft Tailscale setup establishes a reusable sidecar pattern.
-
-An application can have an infrastructure sidecar that shares its network namespace:
-
-```yaml
-services:
-  application:
-    ...
-
-  application-sidecar:
-    image: some-sidecar
-    network_mode: "container:application"
-    ...
-```
-
-For Minecraft:
-
-```yaml
-services:
-  minecraft-tailscale:
-    image: tailscale/tailscale:latest
-    container_name: minecraft-tailscale
-    network_mode: "container:minecraft"
-
-    environment:
-      TS_AUTHKEY: ${TS_AUTHKEY}
-      TS_STATE_DIR: /var/lib/tailscale
-      TS_USERSPACE: "false"
-      TS_EXTRA_ARGS: "--accept-dns=false"
-
-    volumes:
-      - ${APPDATA}/tailscale-minecraft:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-
-    restart: unless-stopped
-```
-
-This makes the sidecar effectively share the application's network namespace.
-
----
-
-# 20. Current Tailscale Architecture
-
-There are therefore two Tailscale nodes:
+Calibre-Web uses:
 
 ```text
-┌───────────────────────────────────────────────┐
-│                 TAILSCALE                     │
-├───────────────────────────────────────────────┤
-│                                               │
-│  home-server                                  │
-│  ├── General home-server access               │
-│  ├── Advertises LAN subnet                    │
-│  └── Can reach Minecraft                      │
-│                                               │
-│  minecraft                                    │
-│  ├── Dedicated Minecraft endpoint             │
-│  ├── 100.72.36.23                             │
-│  ├── Shares Minecraft network namespace       │
-│  └── Provides direct Minecraft access         │
-│                                               │
-└───────────────────────────────────────────────┘
+/books
 ```
+
+The host filesystem therefore provides persistent storage independently of container lifetimes.
 
 ---
 
-# 21. Summary
+# 42. Service Routing Table
 
-The home server has the following overall flow:
+| Hostname                | Service                    | Routing                |
+| ----------------------- | -------------------------- | ---------------------- |
+| `home.eggbase.net`      | Homepage                   | Traefik                |
+| `traefik.eggbase.net`   | Traefik Dashboard          | Traefik                |
+| `portainer.eggbase.net` | Portainer                  | Traefik                |
+| `pihole.eggbase.net`    | Pi-hole                    | Traefik                |
+| `plex.eggbase.net`      | Plex                       | Traefik file provider  |
+| `torrent.eggbase.net`   | qBittorrent                | Traefik                |
+| `pdf.eggbase.net`       | Stirling PDF               | Traefik                |
+| `books.eggbase.net`     | Calibre-Web                | Traefik                |
+| `ntfy.eggbase.net`      | ntfy                       | Traefik                |
+| `status.eggbase.net`    | Uptime Kuma                | Traefik                |
+| `files.eggbase.net`     | Samba namespace            | DNS only / SMB         |
+| `minecraft.eggbase.net` | Minecraft-related hostname | DNS / service-specific |
+
+---
+
+# 43. Protocol Boundaries
+
+Different services use different protocols.
+
+```text
+HTTP / HTTPS
+    │
+    ▼
+Traefik
+    │
+    ├── Homepage
+    ├── Portainer
+    ├── Pi-hole
+    ├── Plex
+    ├── qBittorrent
+    ├── Stirling PDF
+    ├── Calibre-Web
+    ├── ntfy
+    └── Uptime Kuma
+
+DNS
+ │
+ ▼
+Pi-hole :53
+
+SMB
+ │
+ ▼
+Samba :445
+
+Minecraft Java
+ │
+ ▼
+Minecraft :25565
+
+Minecraft Bedrock
+ │
+ ▼
+Minecraft :19132/udp
+```
+
+Traefik is therefore not a universal proxy for every protocol on the server.
+
+---
+
+# 44. Security Boundaries
+
+The architecture contains several useful boundaries.
+
+## LAN Boundary
+
+Normal local services are accessible from the home LAN.
+
+## Docker Boundary
+
+Application services are isolated into containers.
+
+## Reverse Proxy Boundary
+
+HTTP/HTTPS services pass through Traefik.
+
+## DNS Boundary
+
+Pi-hole controls internal hostname resolution.
+
+## Tailscale Boundary
+
+Remote access requires authenticated Tailscale connectivity.
+
+## Minecraft Tailscale Boundary
+
+Minecraft has a dedicated Tailscale identity separate from the general home-server node.
+
+## Control Plane Boundary
+
+GitHub Actions can execute trusted deployment code through the self-hosted runner.
+
+---
+
+# 45. UPnP Security
+
+The intended network architecture assumes:
+
+```text
+ZERO OPEN INBOUND PORTS
+```
+
+on the home router.
+
+Universal Plug and Play should therefore be disabled.
+
+UPnP can allow applications to automatically create router port mappings.
+
+This could undermine the intended security model by allowing services to expose themselves to the Internet without an explicit manual port-forward configuration.
+
+The router should therefore be configured with:
+
+```text
+UPnP: DISABLED
+```
+
+Existing mappings should also be reviewed and removed.
+
+The intended remote-access model is:
+
+```text
+Internet
+   │
+   X
+   │
+Home Router
+   │
+   ├── LAN
+   │
+   └── Tailscale
+```
+
+rather than:
 
 ```text
 Internet
    │
    ▼
-Router
+Port Forward
    │
-   ├── DHCP
-   │     └── DNS → Pi-hole
-   │
-   └── Home LAN
-          │
-          ▼
-      Ubuntu Server
-          │
-          ├── Pi-hole
-          │      └── Local DNS
-          │
-          ├── Nginx Proxy Manager
-          │      └── HTTPS / reverse proxy
-          │
-          ├── Docker services
-          │      ├── Homepage
-          │      ├── Portainer
-          │      ├── Plex
-          │      ├── qBittorrent
-          │      ├── Stirling PDF
-          │      ├── Calibre-Web
-          │      ├── ntfy
-          │      └── Samba
-          │
-          ├── Main Tailscale
-          │      └── LAN subnet access
-          │
-          └── Minecraft
-                 │
-                 └── Minecraft Tailscale sidecar
-                        └── 100.72.36.23
+   ▼
+Home Server
 ```
 
-The result is a home-server environment where:
+---
 
-* **Router** handles DHCP and internet access.
-* **Pi-hole** handles DNS and ad blocking.
-* **`eggbase.net`** provides consistent service hostnames.
-* **Nginx Proxy Manager** handles HTTPS and reverse proxying.
-* **Docker** runs the applications.
-* **Main Tailscale** provides remote access to the home LAN.
-* **Minecraft Tailscale** provides a dedicated direct Tailscale endpoint for Minecraft.
-* **Minecraft remains reachable through the main Tailscale LAN route as well.**
-* **LAN access continues to work normally.**
-* **The sidecar pattern can be reused for other applications when dedicated network access is useful.**
+# 46. Tailscale Security Model
 
-## 22. Important Security Consideration: UPnP
+The main Tailscale node provides access to the LAN subnet.
 
-This architecture assumes **zero open inbound ports** on the home router. 
-All remote access is through Tailscale.
+This means an authorized Tailscale client may potentially reach more than just the Docker services.
 
-**Critical:** Ensure Universal Plug and Play (UPnP) is **disabled** on your router.
-Services like Plex can automatically use UPnP to open firewall ports without your 
-knowledge, bypassing the security model.
+Tailscale access should therefore be treated as trusted network access rather than merely an application login.
 
-To verify:
-1. Log into your router's admin panel.
-2. Find the UPnP settings and disable them.
-3. Check for existing mappings (e.g., Plex may have opened a port).
-4. After disabling, refresh to confirm all mappings are removed.
+The Minecraft sidecar provides a narrower dedicated endpoint:
 
-With UPnP off and no port forwards, your server is invisible to the public internet.
+```text
+Minecraft Tailscale
+       │
+       ▼
+Minecraft network namespace
+```
 
-## 23. Common Architectural Pitfalls
-
-### DNS Propagation
-- Pi-hole local records take effect immediately.
-- If a service isn't reachable via domain, check Pi-hole's local DNS table first.
-
-### Docker Network Isolation
-- Services on `home-server-net` can communicate via container names.
-- If a service can't reach another, verify they're on the same Docker network.
-
-### Tailscale Connectivity
-- Both Tailscale nodes must be authenticated with valid auth keys.
-- The Minecraft sidecar shares the Minecraft container's network—verify both are running.
-
+This avoids using the Minecraft endpoint as a general gateway into the home network.
 
 ---
-**Document Version:** 1.0  
-**Last Updated:** 25 August 2026
+
+# 47. Traefik Security
+
+Traefik's Docker provider uses:
+
+```text
+/var/run/docker.sock
+```
+
+This is a privileged Docker control interface.
+
+Traefik requires it to discover services and their labels.
+
+Because Docker socket access is highly privileged, Traefik should be treated as trusted infrastructure.
+
+The same consideration applies to:
+
+* Portainer
+* AutoKuma
+* GitHub Actions runner deployment operations
+
+---
+
+# 48. Secrets
+
+Sensitive configuration is supplied through environment variables and the `.env` configuration.
+
+Examples include:
+
+```text
+ACME_EMAIL
+CF_DNS_API_TOKEN
+TRAEFIK_USER
+TRAEFIK_PASSWORD_HASH
+PIHOLE_PASSWORD
+KUMA_USERNAME
+KUMA_PASSWORD
+NTFY_UPTIME_KUMA_TOPIC
+TS_AUTHKEY
+SMB_USER
+SMB_PASSWORD
+```
+
+Secrets should not be committed directly into the Git repository.
+
+The repository should contain configuration templates and references such as:
+
+```text
+${CF_DNS_API_TOKEN}
+```
+
+rather than the secret itself.
+
+---
+
+# 49. Disabled Media Automation
+
+The Compose configuration contains optional services for future media automation:
+
+```text
+Prowlarr
+Sonarr
+Radarr
+```
+
+They are currently disabled.
+
+The intended architecture would be:
+
+```text
+Prowlarr
+   │
+   ▼
+Indexers
+   │
+   ├── Sonarr → TV
+   │
+   └── Radarr → Movies
+             │
+             ▼
+         qBittorrent
+             │
+             ▼
+          Downloads
+```
+
+These services can be enabled later without changing the fundamental network architecture.
+
+---
+
+# 50. Service Dependency Model
+
+The major logical dependencies are:
+
+```text
+                    Cloudflare
+                        │
+                        ▼
+                    Traefik
+                        │
+                        ▼
+                 HTTPS Services
+
+
+Router
+  │
+  ▼
+Pi-hole
+  │
+  ▼
+*.eggbase.net
+  │
+  ▼
+Traefik
+  │
+  ▼
+Docker Services
+
+
+GitHub
+  │
+  ▼
+GitHub Actions
+  │
+  ▼
+Self-hosted Runner
+  │
+  ▼
+Docker Compose
+  │
+  ▼
+Docker Services
+
+
+Docker labels
+  │
+  ▼
+AutoKuma
+  │
+  ▼
+Uptime Kuma
+  │
+  ▼
+ntfy
+  │
+  ▼
+Phone
+```
+
+---
+
+# 51. Complete Network Diagram
+
+```text
+                                      INTERNET
+                                          │
+                                          │
+                                  ┌───────▼────────┐
+                                  │   HOME ROUTER  │
+                                  │                │
+                                  │ Gateway        │
+                                  │ DHCP           │
+                                  │ UPnP disabled  │
+                                  └───────┬────────┘
+                                          │
+                                       HOME LAN
+                                          │
+             ┌────────────────────────────┼──────────────────────────┐
+             │                            │                          │
+             ▼                            ▼                          ▼
+       LAN CLIENTS                UBUNTU HOME SERVER            OTHER DEVICES
+             │                            │
+             │ DNS                        │
+             └───────────────────────────►│
+                                          │
+                                  ┌───────▼────────┐
+                                  │     PI-HOLE     │
+                                  │                 │
+                                  │ DNS :53         │
+                                  │ Ad blocking     │
+                                  │ Local DNS       │
+                                  └───────┬─────────┘
+                                          │
+                                          │ SERVER_IP
+                                          ▼
+                                  ┌─────────────────┐
+                                  │     TRAEFIK     │
+                                  │                 │
+                                  │ HTTP :80        │
+                                  │ HTTPS :443      │
+                                  │ Docker provider │
+                                  │ File provider   │
+                                  └───────┬─────────┘
+                                          │
+             ┌────────────────────────────┼─────────────────────────┐
+             │                            │                         │
+             ▼                            ▼                         ▼
+         Homepage                     Portainer                  ntfy
+             │                            │                         │
+             ├── qBittorrent              │                         │
+             ├── Stirling PDF             │                         │
+             ├── Calibre-Web              │                         │
+             ├── Pi-hole                  │                         │
+             ├── Uptime Kuma              │                         │
+             └── other services           │                         │
+                                          │                         │
+                                          └─────────────────────────┘
+
+
+                    ┌───────────────────────────────────┐
+                    │           DOCKER HOST              │
+                    │                                   │
+                    │       home-server-net             │
+                    │                                   │
+                    │ homepage                          │
+                    │ traefik                           │
+                    │ portainer                         │
+                    │ pihole                            │
+                    │ qbittorrent                       │
+                    │ stirlingpdf                       │
+                    │ calibreweb                        │
+                    │ ntfy                              │
+                    │ uptime-kuma                       │
+                    │ autokuma                           │
+                    │ samba                             │
+                    │                                   │
+                    └───────────────────────────────────┘
+
+
+              ┌─────────────────────────────────────────────┐
+              │                OBSERVABILITY                │
+              │                                             │
+              │ Docker labels                               │
+              │      │                                      │
+              │      ▼                                      │
+              │   AutoKuma                                  │
+              │      │                                      │
+              │      ▼                                      │
+              │ Uptime Kuma                                 │
+              │      │                                      │
+              │      ▼                                      │
+              │    ntfy                                     │
+              │      │                                      │
+              │      ▼                                      │
+              │    PHONE                                    │
+              └─────────────────────────────────────────────┘
+
+
+              ┌─────────────────────────────────────────────┐
+              │                 CONTROL PLANE               │
+              │                                             │
+              │ Developer                                   │
+              │     │                                       │
+              │     ▼                                       │
+              │ GitHub Repository                           │
+              │     │                                       │
+              │     ▼                                       │
+              │ GitHub Actions                              │
+              │     │                                       │
+              │     ▼                                       │
+              │ Self-hosted Runner                          │
+              │     │                                       │
+              │     ▼                                       │
+              │ Docker Compose                              │
+              │     │                                       │
+              │     ▼                                       │
+              │ Docker Engine                               │
+              └─────────────────────────────────────────────┘
+
+
+              ┌─────────────────────────────────────────────┐
+              │                  TAILSCALE                  │
+              │                                             │
+              │  Main Tailscale                             │
+              │       │                                     │
+              │       └── advertise LAN_SUBNET             │
+              │                    │                        │
+              │                    ▼                        │
+              │                 HOME LAN                    │
+              │                                             │
+              │  Minecraft Tailscale                        │
+              │       │                                     │
+              │       └── 100.72.36.23                      │
+              │                    │                        │
+              │                    ▼                        │
+              │                Minecraft                    │
+              └─────────────────────────────────────────────┘
+```
+
+---
+
+# 52. Complete Service Architecture
+
+```text
+Ubuntu Server
+│
+├── Docker Engine
+│   │
+│   ├── home-server-net
+│   │   │
+│   │   ├── homepage
+│   │   ├── traefik
+│   │   ├── portainer
+│   │   ├── pihole
+│   │   ├── qbittorrent
+│   │   ├── stirlingpdf
+│   │   ├── calibreweb
+│   │   ├── ntfy
+│   │   ├── uptime-kuma
+│   │   ├── autokuma
+│   │   └── samba
+│   │
+│   └── minecraft-net
+│       │
+│       └── minecraft
+│
+├── Main Tailscale
+│   └── LAN subnet routing
+│
+├── Minecraft Tailscale
+│   └── shared network namespace with Minecraft
+│
+└── GitHub Actions Runner
+    └── Docker Compose deployment
+```
+
+---
+
+# 53. Current Tailscale Architecture
+
+There are two Tailscale nodes.
+
+```text
+┌──────────────────────────────────────────────┐
+│                  TAILSCALE                   │
+├──────────────────────────────────────────────┤
+│                                              │
+│ home-server                                  │
+│ ├── General home-server access               │
+│ ├── Advertises LAN subnet                    │
+│ └── Can reach Minecraft                      │
+│                                              │
+│ minecraft                                    │
+│ ├── Dedicated Minecraft endpoint             │
+│ ├── 100.72.36.23                              │
+│ ├── Shares Minecraft network namespace       │
+│ └── Provides direct Minecraft access         │
+│                                              │
+└──────────────────────────────────────────────┘
+```
+
+---
+
+# 54. Operational Model
+
+The server can be administered manually or automatically.
+
+## Manual
+
+```text
+SSH / Terminal
+      │
+      ▼
+Docker CLI
+      │
+      ▼
+Docker Compose
+```
+
+## Automated
+
+```text
+Git push
+   │
+   ▼
+GitHub Actions
+   │
+   ▼
+Self-hosted Runner
+   │
+   ▼
+Docker Compose
+```
+
+Both ultimately operate on the same Docker Engine.
+
+---
+
+# 55. Failure Domains
+
+The architecture contains several relatively independent failure domains.
+
+## Pi-hole failure
+
+DNS resolution for internal service hostnames may fail.
+
+Direct IP access may still work where supported.
+
+## Traefik failure
+
+HTTPS hostname-based access fails, but individual services may still be running.
+
+## Docker failure
+
+Most application services become unavailable.
+
+## Main Tailscale failure
+
+Remote LAN access through the main Tailscale path fails.
+
+The dedicated Minecraft Tailscale endpoint can remain available.
+
+## Minecraft Tailscale failure
+
+The dedicated Minecraft endpoint fails, but Minecraft can remain accessible through:
+
+* Local LAN
+* Main Tailscale LAN routing
+
+## ntfy failure
+
+Monitoring can continue, but push notifications cannot be delivered.
+
+## Uptime Kuma failure
+
+Service monitoring stops, but the monitored services themselves can continue running.
+
+## GitHub Actions failure
+
+Automatic deployment stops, but the currently running services continue operating.
+
+This is an important property of the deployment architecture: **GitHub is not required for the server to continue serving its existing workloads.**
+
+---
+
+# 56. Architectural Principles
+
+The home server follows several deliberate principles.
+
+### Keep infrastructure simple
+
+Docker Compose is used instead of Kubernetes.
+
+### Separate access from service execution
+
+Tailscale provides remote connectivity while Docker runs applications.
+
+### Use DNS for names, not service discovery
+
+Pi-hole maps service hostnames to the server.
+
+Traefik performs HTTP service routing.
+
+### Keep public exposure at zero
+
+No router port forwarding is required.
+
+### Use DNS-01 for certificates
+
+Let's Encrypt certificates can be issued without exposing HTTP challenge endpoints.
+
+### Treat infrastructure as code
+
+Docker Compose and related configuration live in Git.
+
+### Automate deployment
+
+GitHub Actions deploys through a self-hosted runner.
+
+### Keep monitoring declarative
+
+Docker labels define Uptime Kuma monitors through AutoKuma.
+
+### Keep notifications independent
+
+ntfy acts as the notification transport for monitoring.
+
+### Give special workloads dedicated networking when useful
+
+Minecraft uses a dedicated Tailscale sidecar without exposing the general Docker network.
+
+### Pin production images
+
+Exact image digests are used to avoid unexpected image changes.
+
+---
+
+# 57. Final Architecture Summary
+
+The complete architecture is:
+
+```text
+                         INTERNET
+                            │
+                            ▼
+                     ┌────────────┐
+                     │   ROUTER   │
+                     │ DHCP       │
+                     │ Gateway    │
+                     │ UPnP OFF   │
+                     └─────┬──────┘
+                           │
+                        HOME LAN
+                           │
+             ┌─────────────┼─────────────┐
+             │             │             │
+             ▼             ▼             ▼
+           Clients      Ubuntu Server   Clients
+                           │
+              ┌────────────┼─────────────┐
+              │            │             │
+              ▼            ▼             ▼
+           Pi-hole      Tailscale      GitHub
+              │            │             │
+              │            │             ▼
+              │            │       GitHub Actions
+              │            │             │
+              │            │             ▼
+              │            │       Self-hosted Runner
+              │            │             │
+              │            │             ▼
+              │            │       Docker Compose
+              │            │             │
+              │            │             ▼
+              │            │       Docker Engine
+              │            │             │
+              │            │             ▼
+              │            │       Home Services
+              │            │
+              │            ├── LAN subnet
+              │            │
+              │            └── Remote access
+              │
+              ▼
+        *.eggbase.net
+              │
+              ▼
+           Traefik
+              │
+      ┌───────┼────────┬──────────┐
+      ▼       ▼        ▼          ▼
+   Homepage  Plex   Portainer    ntfy
+      │
+      ├── qBittorrent
+      ├── Stirling PDF
+      ├── Calibre-Web
+      ├── Pi-hole
+      └── Uptime Kuma
+                             
+Docker labels
+      │
+      ▼
+   AutoKuma
+      │
+      ▼
+ Uptime Kuma
+      │
+      ▼
+     ntfy
+      │
+      ▼
+    PHONE
+
+
+Minecraft
+    │
+    ├── Local LAN
+    │
+    ├── Main Tailscale
+    │
+    └── Minecraft Tailscale
+             │
+             ▼
+        100.72.36.23
+```
+
+The resulting system is a self-contained home infrastructure platform with:
+
+* **Router** handling DHCP and Internet access
+* **Pi-hole** handling DNS and ad blocking
+* **`eggbase.net`** providing consistent internal service names
+* **Traefik** handling HTTPS and reverse proxying
+* **Cloudflare DNS-01** handling certificate validation
+* **Docker Compose** running the applications
+* **GitHub Actions** providing automated deployment
+* **Self-hosted runner** executing deployment directly on the Ubuntu host
+* **Tailscale** providing remote LAN access
+* **Minecraft Tailscale** providing a dedicated Minecraft endpoint
+* **Uptime Kuma** monitoring service availability
+* **AutoKuma** turning Docker labels into monitoring configuration
+* **ntfy** delivering push notifications
+* **Samba** providing LAN file access
+* **Pinned container images** providing controlled deployments
+* **Zero intentional inbound router ports** maintaining the remote-access security model
+
+The architecture therefore separates **deployment, networking, service execution, remote access, and observability** while keeping all of the infrastructure manageable through Docker Compose and Git.
