@@ -33,7 +33,13 @@ sudo -n "$HOME_SERVER/scripts/setup.sh"
 echo "    Server setup completed successfully."
 echo
 
+echo "========================================"
+echo "       Validating Compose Files"
+echo "========================================"
+echo
+
 echo "==> Validating Home Server Docker Compose configuration"
+cd "$HOME_SERVER"
 docker compose config --quiet
 echo "    Home Server Compose configuration is valid."
 echo
@@ -51,29 +57,29 @@ echo "    Minecraft Tailscale Compose configuration is valid."
 echo
 
 echo "========================================"
-echo "       Configuration Validated"
+echo "       Deploying Containers"
 echo "========================================"
 echo
 
-echo "==> Deploying Home Server containers"
+echo "==> Deploying Home Server"
 cd "$HOME_SERVER"
 docker compose down --remove-orphans
 docker compose up -d --force-recreate --remove-orphans
-echo "    Home Server containers deployed successfully."
+echo "    Home Server deployed successfully."
 echo
 
-echo "==> Deploying Minecraft containers"
+echo "==> Deploying Minecraft"
 cd "$MINECRAFT"
 docker compose down --remove-orphans
 docker compose up -d --force-recreate --remove-orphans
-echo "    Minecraft containers deployed successfully."
+echo "    Minecraft deployed successfully."
 echo
 
-echo "==> Deploying Minecraft Tailscale containers"
+echo "==> Deploying Minecraft Tailscale"
 cd "$MINECRAFT_TAILSCALE"
 docker compose down --remove-orphans
 docker compose up -d --force-recreate --remove-orphans
-echo "    Minecraft Tailscale containers deployed successfully."
+echo "    Minecraft Tailscale deployed successfully."
 echo
 
 echo "========================================"
