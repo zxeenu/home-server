@@ -156,7 +156,7 @@ services:
     environment:
       TZ: ${TZ}
       FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
-      FTLCONF_dns_listeningMode: all
+      FTLCONF_dns_listeningMode: local # options: all, local
       FTLCONF_dns_hosts: |
         ${SERVER_IP} home.${DOMAIN_NAME}
         ${SERVER_IP} traefik.${DOMAIN_NAME}
@@ -470,14 +470,6 @@ services:
       - kuma.kuma.http.url=https://status.${DOMAIN_NAME}
 
       # AutoKuma-managed ntfy notification provider.
-      # This uses AutoKuma's `notification` label type (marked experimental
-      # in its docs). "config" is the type-specific payload passed straight
-      # through to Uptime Kuma's ntfy provider - the field names below are my
-      # best-known match for that schema but aren't guaranteed to be pixel
-      # perfect. If notifications don't fire after deploying, create one
-      # "ntfy" notification manually in the Kuma UI (Settings > Notifications),
-      # then check Settings > Backup > Export to see the exact field names
-      # Kuma expects, and correct the config line below to match.
       - kuma.ntfy-uptime.notification.name=ntfy
       - kuma.ntfy-uptime.notification.active=true
       - kuma.ntfy-uptime.notification.config={"type":"ntfy","ntfyserverurl":"https://ntfy.${DOMAIN_NAME}","ntfytopic":"${NTFY_UPTIME_KUMA_TOPIC}","ntfyPriority":5,"ntfyAuthenticationMethod":"none"}
