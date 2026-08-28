@@ -133,11 +133,11 @@ services:
       - kuma.traefik.http.accepted_statuscodes=["200","401"]   # basic auth returns 401
       - kuma.traefik.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.50'
-    #       memory: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
   # ---------------- Docker management UI ----------------
   portainer:
@@ -157,11 +157,11 @@ services:
       - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
       - kuma.portainer.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.50'
-    #       memory: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
   # ---------------- DNS / ad-blocking ----------------
   pihole:
@@ -218,11 +218,11 @@ services:
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.50'
-    #       memory: 200M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 200M
 
   # ---------------- Media server ----------------
   # Currently running:
@@ -254,11 +254,11 @@ services:
       - kuma.plex.http.url=https://plex.${DOMAIN_NAME}
       - kuma.plex.http.accepted_statuscodes=["200","302","401"]   # Plex may redirect
       - kuma.plex.http.notification_name_list=["ntfy-uptime"]
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '1.50'
-    #       memory: 2G
+    deploy:
+      resources:
+        limits:
+          cpus: '1.50'
+          memory: 2G
 
   # ---------------- Torrent client ----------------
   # Currently running:
@@ -296,11 +296,11 @@ services:
       - kuma.torrent.http.url=https://torrent.${DOMAIN_NAME}
       - kuma.torrent.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '1.00'
-    #       memory: 1G
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
 
   # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
   stirlingpdf:
@@ -395,11 +395,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.25'
-    #       memory: 128M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
 
   # ---------------- Indexer manager (disabled - uncomment to enable automation) ----------------
   # If you enable this, also add "${SERVER_IP} prowlarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
@@ -493,11 +493,11 @@ services:
       -u "${SMB_USER};${SMB_PASSWORD}"
       -s "media;/media;yes;no;no;${SMB_USER}"
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.50'
-    #       memory: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
   # ---------------- Tailscale (remote access via WireGuard mesh VPN) ----------------
   tailscale:
@@ -516,11 +516,11 @@ services:
       - NET_ADMIN
       - NET_RAW
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.25'
-    #       memory: 128M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
 
   # ---------------- Uptime Kuma (Status of all the services) ----------------
   uptime-kuma:
@@ -544,11 +544,11 @@ services:
       - kuma.ntfy-uptime.notification.active=true
       - kuma.ntfy-uptime.notification.config={"type":"ntfy","ntfyserverurl":"https://ntfy.${DOMAIN_NAME}","ntfytopic":"${NTFY_UPTIME_KUMA_TOPIC}","ntfyPriority":5,"ntfyAuthenticationMethod":"none"}
     restart: unless-stopped
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.75'
-    #       memory: 384M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 384M
 
   # ---------------- AutoKuma (automatic monitor creation from Docker labels) ----------------
   autokuma:
@@ -563,11 +563,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${APPDATA}/autokuma:/data
     # No labels needed – AutoKuma ignores itself by default
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '0.50'
-    #       memory: 256M
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
 
 networks:
   default:
