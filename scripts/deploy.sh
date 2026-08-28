@@ -34,6 +34,11 @@ docker compose config --quiet
 echo "    Docker Compose configuration is valid."
 echo
 
+echo "==> Stopping existing containers"
+docker compose down --remove-orphans
+echo "    Existing containers stopped and removed."
+echo
+
 echo "==> Deploying containers"
 docker compose up -d --force-recreate --remove-orphans
 echo "    Containers deployed successfully."
