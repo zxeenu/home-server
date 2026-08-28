@@ -15,7 +15,7 @@
 # back to your user afterward so containers (running as PUID/PGID 1000)
 # can actually write to them.
 # ---------------------------------------------------------------------------
-set -e
+set -euo pipefail
 
 if [ "$EUID" -ne 0 ]; then
   echo "Please run this with sudo: sudo ./setup.sh"
