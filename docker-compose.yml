@@ -161,7 +161,7 @@ services:
       resources:
         limits:
           cpus: '0.50'
-          memory: 384M
+          memory: 256M
 
   # ---------------- DNS / ad-blocking ----------------
   pihole:
@@ -222,7 +222,7 @@ services:
       resources:
         limits:
           cpus: '0.50'
-          memory: 256M
+          memory: 200M
 
   # ---------------- Media server ----------------
   # Currently running:
@@ -257,8 +257,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '3.00'
-          memory: 3G
+          cpus: '1.50'
+          memory: 2G
 
   # ---------------- Torrent client ----------------
   # Currently running:
@@ -299,8 +299,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.50'
-          memory: 1.5G
+          cpus: '1.00'
+          memory: 1G
 
   # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
   stirlingpdf:
@@ -327,8 +327,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.00'
-          memory: 768M
+          cpus: '0.75'
+          memory: 512M
 
   # ---------------- Ebook library & web reader ----------------
   # Calibre-Web NextGen
@@ -358,8 +358,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.00'
-          memory: 512M
+          cpus: '0.75'
+          memory: 384M
 
   # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
   ntfy:
@@ -449,8 +449,8 @@ services:
   #   deploy:
   #     resources:
   #       limits:
-  #         cpus: '0.75'
-  #         memory: 512M
+  #         cpus: '0.50'
+  #         memory: 384M
 
   # ---------------- Movie automation (disabled - uncomment to enable automation) ----------------
   # If you enable this, also add "${SERVER_IP} radarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
@@ -475,8 +475,8 @@ services:
   #   deploy:
   #     resources:
   #       limits:
-  #         cpus: '0.75'
-  #         memory: 512M
+  #         cpus: '0.50'
+  #         memory: 384M
 
   # ---------------- Network file share (browse & clean up media over LAN) ----------------
   samba:
@@ -547,8 +547,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.00'
-          memory: 512M
+          cpus: '0.75'
+          memory: 384M
 
   # ---------------- AutoKuma (automatic monitor creation from Docker labels) ----------------
   autokuma:
@@ -572,3 +572,7 @@ services:
 networks:
   default:
     name: home-server-net
+
+# Tune kernel swap behavior for containers.
+# 10 = minimal swap (safety net without thrashing your SSD)
+# mem_swappiness: 10
