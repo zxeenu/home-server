@@ -152,6 +152,9 @@ services:
       - traefik.http.routers.portainer.entrypoints=websecure
       - traefik.http.routers.portainer.tls.certresolver=cloudflare
       - traefik.http.services.portainer.loadbalancer.server.port=9000
+      # Restrict access to LAN + Tailscale only (100.64.0.0/10 = Tailscale's CGNAT range)
+      - traefik.http.middlewares.portainer-whitelist.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
+      - traefik.http.routers.portainer.middlewares=portainer-whitelist
       # AutoKuma monitor
       - kuma.portainer.http.name=Portainer
       - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
