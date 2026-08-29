@@ -87,7 +87,7 @@ services:
     image: traefik@sha256:ef751c695afd26e2be41009047f651153dc1e61ace03e6d13f299d8c4be842b8
     container_name: traefik
     command:
-      - --log.level=DEBUG
+      - --log.level=INFO
       - --api.insecure=false
       - --api.dashboard=true
       - --providers.docker=true
