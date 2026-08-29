@@ -91,25 +91,25 @@ fi
 # discovery can't reach it (no Docker-network IP to route to). Instead,
 # Traefik's file provider is used to manually define a router + service
 # pointing straight at the host's LAN IP on Plex's port (32400). This file
-# is only created if it doesn't already exist, so any manual edits you've
-# made to plex.yml won't be overwritten by re-running this script.
+# is regenerated on every run, so any manual edits you've made to plex.yml
+# will be overwritten - re-run this script after changing .env if you need
+# those changes picked up.
 # ---------------------------------------------------------------------------
 PLEX_DYNAMIC_FILE="$APPDATA/traefik/dynamic/plex.yml"
-if [ ! -f "$PLEX_DYNAMIC_FILE" ]; then
-  echo "Creating Traefik dynamic config for Plex at $PLEX_DYNAMIC_FILE ..."
+echo "Writing Traefik dynamic config for Plex at $PLEX_DYNAMIC_FILE ..."
 
-  # Reuse the LAN IP detected above if we have it; otherwise try again here
-  PLEX_IP="${DETECTED_IP:-$(sudo -u "$REAL_USER" hostname -I 2>/dev/null | awk '{print $1}')}"
+# Reuse the LAN IP detected above if we have it; otherwise try again here
+PLEX_IP="${DETECTED_IP:-$(sudo -u "$REAL_USER" hostname -I 2>/dev/null | awk '{print $1}')}"
 
-  if [ -n "$PLEX_IP" ]; then
-    # Try to read DOMAIN_NAME from .env so the rule is pre-filled correctly
-    DOMAIN_NAME_VALUE=""
-    if [ -f "$ENV_DIR/.env" ]; then
-      DOMAIN_NAME_VALUE=$(grep -E '^DOMAIN_NAME=' "$ENV_DIR/.env" | cut -d '=' -f2-)
-    fi
-    DOMAIN_NAME_VALUE="${DOMAIN_NAME_VALUE:-yourdomain.com}"
+if [ -n "$PLEX_IP" ]; then
+  # Try to read DOMAIN_NAME from .env so the rule is pre-filled correctly
+  DOMAIN_NAME_VALUE=""
+  if [ -f "$ENV_DIR/.env" ]; then
+    DOMAIN_NAME_VALUE=$(grep -E '^DOMAIN_NAME=' "$ENV_DIR/.env" | cut -d '=' -f2-)
+  fi
+  DOMAIN_NAME_VALUE="${DOMAIN_NAME_VALUE:-yourdomain.com}"
 
-    cat > "$PLEX_DYNAMIC_FILE" << EOF
+  cat > "$PLEX_DYNAMIC_FILE" << EOF
 http:
   routers:
     plex:
@@ -126,14 +126,11 @@ http:
         servers:
           - url: "http://${PLEX_IP}:32400"
 EOF
-    echo "Plex dynamic config written using detected IP ($PLEX_IP) and domain (${DOMAIN_NAME_VALUE})."
-    echo "Double check both are correct in $PLEX_DYNAMIC_FILE before relying on it."
-  else
-    echo "Could not auto-detect an IP - skipping plex.yml generation."
-    echo "Create $PLEX_DYNAMIC_FILE manually, see the docker-compose.yml comment on the plex service."
-  fi
+  echo "Plex dynamic config written using detected IP ($PLEX_IP) and domain (${DOMAIN_NAME_VALUE})."
+  echo "Double check both are correct in $PLEX_DYNAMIC_FILE before relying on it."
 else
-  echo "Skipping Plex dynamic config (already exists at $PLEX_DYNAMIC_FILE)."
+  echo "Could not auto-detect an IP - skipping plex.yml generation."
+  echo "Create $PLEX_DYNAMIC_FILE manually, see the docker-compose.yml comment on the plex service."
 fi
 
 echo "Handing folder ownership to $REAL_USER ..."
