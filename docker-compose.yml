@@ -287,6 +287,9 @@ services:
       - traefik.http.routers.qbittorrent.entrypoints=websecure
       - traefik.http.routers.qbittorrent.tls.certresolver=cloudflare
       - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
+      # Restrict access to LAN + Tailscale only (100.64.0.0/10 = Tailscale's CGNAT range)
+      - traefik.http.middlewares.qbittorrent-whitelist.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
+      - traefik.http.routers.qbittorrent.middlewares=qbittorrent-whitelist
 
       # Add trailing slash ONLY if missing (root path)
       # - traefik.http.middlewares.add-slash.redirectregex.regex=^(https?://torrent\.[^/]+)$
@@ -322,6 +325,9 @@ services:
       - traefik.http.routers.stirlingpdf.entrypoints=websecure
       - traefik.http.routers.stirlingpdf.tls.certresolver=cloudflare
       - traefik.http.services.stirlingpdf.loadbalancer.server.port=8080
+      # Restrict access to LAN + Tailscale only (100.64.0.0/10 = Tailscale's CGNAT range)
+      - traefik.http.middlewares.stirlingpdf-whitelist.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
+      - traefik.http.routers.stirlingpdf.middlewares=stirlingpdf-whitelist
       # AutoKuma monitor
       - kuma.pdf.http.name=Stirling PDF
       - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
@@ -375,7 +381,11 @@ services:
       NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
       NTFY_BEHIND_PROXY: true
       NTFY_ENABLE_LOGIN: "false"
-      NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      # NOTE: no NTFY_ACCESS_CONTROL_ALLOW_ORIGIN here on purpose - CORS is
+      # handled entirely by the Traefik middleware below instead, so ntfy
+      # doesn't emit its own Access-Control-Allow-Origin header. Having both
+      # ntfy and Traefik set that header results in duplicate values, which
+      # browsers reject as invalid CORS.
     volumes:
       - ${APPDATA}/ntfy/cache:/var/cache/ntfy
       - ${APPDATA}/ntfy/etc:/etc/ntfy
@@ -385,6 +395,16 @@ services:
       - traefik.http.routers.ntfy.entrypoints=websecure
       - traefik.http.routers.ntfy.tls.certresolver=cloudflare
       - traefik.http.services.ntfy.loadbalancer.server.port=80
+      # CORS: reflect the Origin header back only when it's the bare domain
+      # or any subdomain of it (e.g. home.${DOMAIN_NAME}, dashboard.${DOMAIN_NAME}).
+      # Covers current and future embeds without ever needing to edit this
+      # again when you add another subdomain.
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
+      - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
+      - traefik.http.routers.ntfy.middlewares=ntfy-cors
       # AutoKuma monitor
       # NOTE: this only monitors ntfy's own uptime. It intentionally does NOT
       # get notification_name_list, since if ntfy itself is down it can't be
