@@ -405,6 +405,7 @@
     kumaNotifications: [],
     services: [],
     loading: true,
+    tempId: 0,
 
     getNtfyBaseUrl() {
       return this.useIp ? 'http://' + this.serverIp + ':8084' : 'https://ntfy.{{DOMAIN_NAME}}';
@@ -428,7 +429,7 @@
       return text.includes('down');
     },
 
-    async fetchTopic(topic, targetKey, retry = 1) {
+    async fetchTopic(topic, targetKey) {
       try {
         const url = this.getNtfyJsonUrl(topic, 10);
         const resp = await fetch(url);
@@ -446,18 +447,37 @@
         }));
       } catch (err) {
         console.warn('Fetch failed (' + topic + '):', err);
-        if (retry > 0) setTimeout(() => this.fetchTopic(topic, targetKey, 0), 500);
-        else this[targetKey] = [];
+        this[targetKey] = [];
       }
     },
 
     async sendMessage() {
       if (!this.newMessage.trim()) return;
+      const text = this.newMessage.trim();
+      // Optimistically add a temporary message
+      const tempId = 'temp-' + (++this.tempId);
+      this.notifications.unshift({
+        id: tempId,
+        title: '',
+        message: text,
+        time: 'Sending…',
+        down: false,
+        optimistic: true
+      });
+      if (this.notifications.length > 11) this.notifications.pop(); // keep max 11 (temp + 10 real)
+
       try {
-        const resp = await fetch(this.getNtfyPublishUrl(), { method: 'POST', body: this.newMessage });
+        const resp = await fetch(this.getNtfyPublishUrl(), {
+          method: 'POST',
+          body: text
+        });
         if (!resp.ok) throw new Error('Send failed');
         this.newMessage = '';
-      } catch (err) { alert('Failed to send notification: ' + err.message); }
+      } catch (err) {
+        // Remove the temporary message on error and alert
+        this.notifications = this.notifications.filter(n => n.id !== tempId);
+        alert('Failed to send notification: ' + err.message);
+      }
     },
 
     initTopicStream(topic, connectedKey, targetKey) {
@@ -469,14 +489,32 @@
           let data;
           try { data = JSON.parse(e.data); } catch { return; }
           if (data.event !== 'message') return;
-          this[targetKey].unshift({
+          const newMsg = {
             id: data.id,
             title: data.title || '',
             message: data.message || '',
             time: new Date(data.time * 1000).toLocaleTimeString(),
             down: this.isDownMessage(data.title, data.message)
-          });
-          if (this[targetKey].length > 10) this[targetKey].pop();
+          };
+          // Check if we already have this message (by id) or an optimistic one with same text
+          const existing = this[targetKey].find(n => n.id === data.id);
+          if (existing) {
+            // Update existing (in case it was optimistic)
+            Object.assign(existing, newMsg);
+            return;
+          }
+          // Look for an optimistic message with the same text (case‑insensitive)
+          const optimisticIdx = this[targetKey].findIndex(
+            n => n.optimistic && n.message.trim().toLowerCase() === newMsg.message.trim().toLowerCase()
+          );
+          if (optimisticIdx !== -1) {
+            // Replace the optimistic entry with the real one
+            this[targetKey].splice(optimisticIdx, 1, { ...newMsg, optimistic: false });
+          } else {
+            // Normal addition
+            this[targetKey].unshift(newMsg);
+            if (this[targetKey].length > 10) this[targetKey].pop();
+          }
         };
       } catch (err) {
         this[connectedKey] = false;
@@ -499,16 +537,19 @@
         });
     },
 
-    init() {
-      // Detect if we're accessing via IP
+    async init() {
+      // Detect IP access
       this.useIp = /^\d+\.\d+\.\d+\.\d+$/.test(window.location.hostname);
-      this.loadServices();
+      // Load initial messages first
+      await Promise.all([
+        this.fetchTopic(this.ntfyTopic, 'notifications'),
+        this.fetchTopic(this.kumaTopic, 'kumaNotifications')
+      ]);
+      // Then start SSE streams (they will only add new messages)
       this.initTopicStream(this.ntfyTopic, 'ntfyConnected', 'notifications');
       this.initTopicStream(this.kumaTopic, 'kumaConnected', 'kumaNotifications');
-      setTimeout(() => {
-        this.fetchTopic(this.ntfyTopic, 'notifications');
-        this.fetchTopic(this.kumaTopic, 'kumaNotifications');
-      }, 150);
+      // Load services
+      this.loadServices();
     }
   }" x-init="init()">
 
