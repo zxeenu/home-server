@@ -384,7 +384,10 @@ services:
       NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
       NTFY_BEHIND_PROXY: true
       NTFY_ENABLE_LOGIN: "false"
-      NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      # NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      NTFY_VISITOR_REQUEST_LIMIT_BURST: "300"
+      NTFY_VISITOR_REQUEST_LIMIT_REPLENISH: "1s"
+      NTFY_VISITOR_SUBSCRIPTION_LIMIT: "200"
     volumes:
       - ${APPDATA}/ntfy/cache:/var/cache/ntfy
       - ${APPDATA}/ntfy/etc:/etc/ntfy
@@ -394,6 +397,7 @@ services:
       - traefik.http.routers.ntfy.entrypoints=websecure
       - traefik.http.routers.ntfy.tls.certresolver=cloudflare
       - traefik.http.services.ntfy.loadbalancer.server.port=80
+      
       # CORS: reflect the Origin header back only when it's the bare domain
       # or any subdomain of it (e.g. home.${DOMAIN_NAME}, dashboard.${DOMAIN_NAME}).
       # Covers current and future embeds without ever needing to edit this
@@ -403,12 +407,13 @@ services:
       # doesn't emit its own Access-Control-Allow-Origin header. Having both
       # ntfy and Traefik set that header results in duplicate values, which
       # browsers reject as invalid CORS.
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
-      # - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
-      # - traefik.http.routers.ntfy.middlewares=ntfy-cors
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
+      - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
+      - traefik.http.routers.ntfy.middlewares=ntfy-cors
+
       # AutoKuma monitor
       # NOTE: this only monitors ntfy's own uptime. It intentionally does NOT
       # get notification_name_list, since if ntfy itself is down it can't be
