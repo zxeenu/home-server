@@ -384,7 +384,7 @@ services:
       NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
       NTFY_BEHIND_PROXY: true
       NTFY_ENABLE_LOGIN: "false"
-      NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
+      # NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
       NTFY_VISITOR_REQUEST_LIMIT_BURST: "300"
       NTFY_VISITOR_REQUEST_LIMIT_REPLENISH: "1s"
       NTFY_VISITOR_SUBSCRIPTION_LIMIT: "200"
@@ -407,13 +407,12 @@ services:
       # doesn't emit its own Access-Control-Allow-Origin header. Having both
       # ntfy and Traefik set that header results in duplicate values, which
       # browsers reject as invalid CORS.
-      # Inteferes with SSE, disabled for now
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
-      # - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
-      # - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
-      # - traefik.http.routers.ntfy.middlewares=ntfy-cors
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
+      - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
+      - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
+      - traefik.http.routers.ntfy.middlewares=ntfy-cors
 
       # AutoKuma monitor
       # NOTE: this only monitors ntfy's own uptime. It intentionally does NOT
