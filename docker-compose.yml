@@ -157,7 +157,8 @@ services:
       - traefik.http.routers.portainer.middlewares=portainer-whitelist
       # AutoKuma monitor
       - kuma.portainer.http.name=Portainer
-      - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
+      # - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
+      - kuma.portainer.http.url=http://portainer:9000
       - kuma.portainer.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
     deploy:
@@ -299,7 +300,8 @@ services:
 
       # AutoKuma monitor
       - kuma.torrent.http.name=qBittorrent
-      - kuma.torrent.http.url=https://torrent.${DOMAIN_NAME}
+      # - kuma.torrent.http.url=https://torrent.${DOMAIN_NAME}
+      - kuma.torrent.http.url=http://qbittorrent:8080
       - kuma.torrent.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
     deploy:
@@ -330,7 +332,8 @@ services:
       - traefik.http.routers.stirlingpdf.middlewares=stirlingpdf-whitelist
       # AutoKuma monitor
       - kuma.pdf.http.name=Stirling PDF
-      - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
+      # - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
+      - kuma.pdf.http.url=http://stirlingpdf:8080
       - kuma.pdf.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
     deploy:
@@ -381,11 +384,7 @@ services:
       NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
       NTFY_BEHIND_PROXY: true
       NTFY_ENABLE_LOGIN: "false"
-      # NOTE: no NTFY_ACCESS_CONTROL_ALLOW_ORIGIN here on purpose - CORS is
-      # handled entirely by the Traefik middleware below instead, so ntfy
-      # doesn't emit its own Access-Control-Allow-Origin header. Having both
-      # ntfy and Traefik set that header results in duplicate values, which
-      # browsers reject as invalid CORS.
+      NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
     volumes:
       - ${APPDATA}/ntfy/cache:/var/cache/ntfy
       - ${APPDATA}/ntfy/etc:/etc/ntfy
@@ -399,12 +398,17 @@ services:
       # or any subdomain of it (e.g. home.${DOMAIN_NAME}, dashboard.${DOMAIN_NAME}).
       # Covers current and future embeds without ever needing to edit this
       # again when you add another subdomain.
-      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
-      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
-      - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
-      - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
-      - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
-      - traefik.http.routers.ntfy.middlewares=ntfy-cors
+      # NOTE: no NTFY_ACCESS_CONTROL_ALLOW_ORIGIN here on purpose - CORS is
+      # handled entirely by the Traefik middleware below instead, so ntfy
+      # doesn't emit its own Access-Control-Allow-Origin header. Having both
+      # ntfy and Traefik set that header results in duplicate values, which
+      # browsers reject as invalid CORS.
+      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
+      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
+      # - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
+      # - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
+      # - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
+      # - traefik.http.routers.ntfy.middlewares=ntfy-cors
       # AutoKuma monitor
       # NOTE: this only monitors ntfy's own uptime. It intentionally does NOT
       # get notification_name_list, since if ntfy itself is down it can't be
