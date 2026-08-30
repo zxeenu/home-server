@@ -418,6 +418,12 @@ The self-hosted runner runs directly on the home server and is assigned a dedica
 eggbase-net
 ```
 
+You are able to skip the deploy action workflow from being processed by puttin the following keywords in the commit message:
+
+```text
+skip deploy
+```
+
 The deployment workflow targets:
 
 ```yaml
