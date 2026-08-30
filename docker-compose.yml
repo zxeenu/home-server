@@ -56,6 +56,12 @@
 #      UI (Settings -> Notifications) instead; it only needs to exist once.
 # ---------------------------------------------------------------------------
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 name: home-server
 
 services:
@@ -63,6 +69,7 @@ services:
   # ---------------- Home dashboard (static landing page linking to all services) ----------------
   homepage:
     image: nginx:alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
+    logging: *default-logging
     container_name: homepage
     volumes:
       - ./index.html:/usr/share/nginx/html/index.html:ro
@@ -87,6 +94,7 @@ services:
   # ---------------- Traefik reverse proxy (handles all HTTPS) ----------------
   traefik:
     image: traefik@sha256:ef751c695afd26e2be41009047f651153dc1e61ace03e6d13f299d8c4be842b8
+    logging: *default-logging
     container_name: traefik
     command:
       - --log.level=INFO
@@ -144,6 +152,7 @@ services:
   # ---------------- Docker management UI ----------------
   portainer:
     image: portainer/portainer-ce@sha256:3fa8750ac2b98ce56784ca292df1adc3ec38f0062fd572811ea4b2221beee310
+    logging: *default-logging
     container_name: portainer
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -172,6 +181,7 @@ services:
   # ---------------- DNS / ad-blocking ----------------
   pihole:
     image: pihole/pihole@sha256:f7d1be836e3bc608b56d82fc9904f5a831cdfbc0dc9c6d58f94e4c985c70038b
+    logging: *default-logging
     container_name: pihole
     hostname: pihole
     environment:
@@ -235,6 +245,7 @@ services:
   #   Plex 1.43.3.10896-cb3ebc72d-ls321
   plex:
     image: lscr.io/linuxserver/plex@sha256:f6c58cb2f5e41cd1397bf2ed4e61ef63bd86e0736841b3ef426fabfe04606293
+    logging: *default-logging
     container_name: plex
     network_mode: host   # simplest for Plex discovery/DLNA; remove if you'd rather bridge+ports
     environment:
@@ -271,6 +282,7 @@ services:
   #   qBittorrent 5.2.3_v2.0.14-ls472
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent@sha256:212b86dff59e3962b4082b5ef20a577e76c8f8527d2ab505cfa887b4bcecb0b0
+    logging: *default-logging
     container_name: qbittorrent
     environment:
       PUID: ${PUID}
@@ -315,6 +327,7 @@ services:
   # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
   stirlingpdf:
     image: stirlingtools/stirling-pdf@sha256:3b3670fce70b396ec56ba380a3cc7858e0abf83fe13f31c88f7737847763a396
+    logging: *default-logging
     container_name: stirlingpdf
     environment:
       TZ: ${TZ}
@@ -349,6 +362,7 @@ services:
   # Pinned to exact image digest.
   calibreweb:
     image: ghcr.io/new-usemame/calibre-web-nextgen@sha256:9ac36a23138e2c84fa48bd9f9e13c8ce1128f53764408ac57e15226628545f87
+    logging: *default-logging
     container_name: calibreweb
     environment:
       PUID: ${PUID}
@@ -378,6 +392,7 @@ services:
   # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
   ntfy:
     image: binwiederhier/ntfy@sha256:f2419f405127afa868f10985c1a41449e673477cee1eb19994339a5ae8b592e7
+    logging: *default-logging
     container_name: ntfy
     command:
       - serve
@@ -515,6 +530,7 @@ services:
   # ---------------- Network file share (browse & clean up media over LAN) ----------------
   samba:
     image: ghcr.io/servercontainers/samba@sha256:57859789bd3425e6e929269fa13b16251cc8b8f939e4362ed7100aaf41a17122
+    logging: *default-logging
     container_name: samba
     environment:
       TZ: ${TZ}
@@ -522,11 +538,10 @@ services:
       - ${MEDIA}:/media
     ports:
       - "445:445"
-    command:
-      - "-u"
-      - "${SMB_USER};${SMB_PASSWORD}"
-      - "-s"
-      - "media;/media;yes;no;no;${SMB_USER}"
+    environment:
+      TZ: ${TZ}
+      UID_${SMB_USER}: ${PUID}
+      ACCOUNT_${SMB_USER}: ${SMB_PASSWORD}
     restart: unless-stopped
     deploy:
       resources:
@@ -537,6 +552,7 @@ services:
   # ---------------- Tailscale (remote access via WireGuard mesh VPN) ----------------
   tailscale:
     image: tailscale/tailscale@sha256:8c42c4574ab066384fcb72f69e086a2ff1dd3652eb6f56856cee34bcf0d2f680
+    logging: *default-logging
     container_name: tailscale
     hostname: home-server
     environment:
@@ -561,6 +577,7 @@ services:
   uptime-kuma:
   # Version 2 latest digest
     image: louislam/uptime-kuma@sha256:3e24e96c89efff0e3a4b0698cbdd36c15ad3022371db57166e5588853002ee5c
+    logging: *default-logging
     container_name: uptime-kuma
     volumes:
       - ${APPDATA}/uptime-kuma:/app/data
@@ -588,6 +605,7 @@ services:
   # ---------------- AutoKuma (automatic monitor creation from Docker labels) ----------------
   autokuma:
     image: ghcr.io/bigboot/autokuma@sha256:8acbd3ad3ec8cb6c066aa0ee541154921283ec78159015937128541921c47974
+    logging: *default-logging
     container_name: autokuma
     restart: unless-stopped
     environment:
