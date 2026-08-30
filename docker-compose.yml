@@ -540,6 +540,13 @@ services:
       TZ: ${TZ}
       UID_homeserver: ${PUID}
       ACCOUNT_homeserver: ${SMB_PASSWORD}
+      SAMBA_VOLUME_CONFIG_media: |
+        [Media]
+        path = /media
+        valid users = homeserver
+        guest ok = no
+        read only = no
+        browseable = yes
     restart: unless-stopped
     deploy:
       resources:
