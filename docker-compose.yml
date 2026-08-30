@@ -538,8 +538,8 @@ services:
       - "445:445"
     environment:
       TZ: ${TZ}
-      UID_${SMB_USER}: ${PUID}
-      ACCOUNT_${SMB_USER}: ${SMB_PASSWORD}
+      UID_homeserver: ${PUID}
+      ACCOUNT_homeserver: ${SMB_PASSWORD}
     restart: unless-stopped
     deploy:
       resources:
