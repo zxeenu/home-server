@@ -5,7 +5,7 @@ services:
     image: tailscale/tailscale@sha256:8c42c4574ab066384fcb72f69e086a2ff1dd3652eb6f56856cee34bcf0d2f680
     container_name: minecraft-tailscale
 
-    network_mode: "container:minecraft"
+    network_mode: "service:minecraft"
 
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY}
