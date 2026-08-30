@@ -7,7 +7,9 @@ on:
 
 jobs:
   deploy:
-    if: github.repository == 'eggbase-net/home-server'
+    if:  >
+      github.repository == 'eggbase-net/home-server' &&
+      !contains(github.event.head_commit.message, '[skip deploy]')
     runs-on: [self-hosted, Linux, X64, eggbase-net]
 
     steps:
