@@ -56,6 +56,8 @@
 #      UI (Settings -> Notifications) instead; it only needs to exist once.
 # ---------------------------------------------------------------------------
 
+name: home-server
+
 services:
 
   # ---------------- Home dashboard (static landing page linking to all services) ----------------

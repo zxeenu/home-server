@@ -120,6 +120,19 @@ After verifying the new image, the digest can be committed to Git.
 
 This gives the deployment a deterministic relationship between the Git commit and the container image being executed.
 
+The workflow used to obtain new digests is as follows:
+
+```bash
+# 1. See what's new upstream, pull it out-of-band
+docker pull lscr.io/linuxserver/plex:latest
+
+# 2. Get the digest
+docker inspect --format '{{index .RepoDigests 0}}' lscr.io/linuxserver/plex:latest
+# lscr.io/linuxserver/plex@sha256:f6c58cb2f5e4...
+
+# 3. Update the compose pin, then with the new digest hash
+```
+
 ---
 
 # Reverse Proxy and HTTPS
@@ -390,6 +403,8 @@ Docker Compose
 This creates a deliberate separation between **publicly documented infrastructure** and the **private automation that has authority to operate it**.
 
 The public repository can therefore remain open as a technical reference and portfolio for the project, while the private repository acts as the trusted deployment control plane.
+
+This is done simply by having 2 origins on the local working copy. Hence when changes are pushed, they go to both repositories. 
 
 ---
 
