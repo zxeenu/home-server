@@ -73,6 +73,7 @@ if [ -f "$ENV_DIR/.env.example" ] && [ ! -f "$ENV_DIR/.env" ]; then
 
   # Try to auto-detect the server's LAN IP and pre-fill SERVER_IP in .env
   DETECTED_IP=$(sudo -u "$REAL_USER" hostname -I 2>/dev/null | awk '{print $1}')
+
   if [ -n "$DETECTED_IP" ]; then
     sed -i "s/^SERVER_IP=.*/SERVER_IP=${DETECTED_IP}/" "$ENV_DIR/.env"
     echo "Detected LAN IP: $DETECTED_IP - pre-filled as SERVER_IP in .env."
@@ -89,11 +90,16 @@ fi
 #
 # Plex runs with network_mode: host, so Traefik's Docker label-based
 # discovery can't reach it (no Docker-network IP to route to). Instead,
-# Traefik's file provider is used to manually define a router + service
-# pointing straight at the host's LAN IP on Plex's port (32400). This file
-# is regenerated on every run, so any manual edits you've made to plex.yml
-# will be overwritten - re-run this script after changing .env if you need
-# those changes picked up.
+# the Traefik file provider is used to manually define a router + service
+# pointing straight at the host's LAN IP on Plex's port (32400).
+#
+# The LAN-only middleware is also defined HERE rather than referencing
+# lan-only@docker. This keeps the Plex file-provider configuration
+# self-contained and avoids depending on the Docker provider middleware.
+#
+# This file is regenerated on every run, so any manual edits you've made
+# to plex.yml will be overwritten - re-run this script after changing .env
+# if you need those changes picked up.
 # ---------------------------------------------------------------------------
 PLEX_DYNAMIC_FILE="$APPDATA/traefik/dynamic/plex.yml"
 echo "Writing Traefik dynamic config for Plex at $PLEX_DYNAMIC_FILE ..."
@@ -101,16 +107,29 @@ echo "Writing Traefik dynamic config for Plex at $PLEX_DYNAMIC_FILE ..."
 # Reuse the LAN IP detected above if we have it; otherwise try again here
 PLEX_IP="${DETECTED_IP:-$(sudo -u "$REAL_USER" hostname -I 2>/dev/null | awk '{print $1}')}"
 
+# Try to read DOMAIN_NAME and LAN_SUBNET from .env
+DOMAIN_NAME_VALUE=""
+LAN_SUBNET_VALUE=""
+
+if [ -f "$ENV_DIR/.env" ]; then
+  DOMAIN_NAME_VALUE=$(grep -E '^DOMAIN_NAME=' "$ENV_DIR/.env" | cut -d '=' -f2-)
+  LAN_SUBNET_VALUE=$(grep -E '^LAN_SUBNET=' "$ENV_DIR/.env" | cut -d '=' -f2-)
+fi
+
+DOMAIN_NAME_VALUE="${DOMAIN_NAME_VALUE:-yourdomain.com}"
+LAN_SUBNET_VALUE="${LAN_SUBNET_VALUE:-192.168.100.0/24}"
+
 if [ -n "$PLEX_IP" ]; then
-  # Try to read DOMAIN_NAME from .env so the rule is pre-filled correctly
-  DOMAIN_NAME_VALUE=""
-  if [ -f "$ENV_DIR/.env" ]; then
-    DOMAIN_NAME_VALUE=$(grep -E '^DOMAIN_NAME=' "$ENV_DIR/.env" | cut -d '=' -f2-)
-  fi
-  DOMAIN_NAME_VALUE="${DOMAIN_NAME_VALUE:-yourdomain.com}"
 
   cat > "$PLEX_DYNAMIC_FILE" << EOF
 http:
+  middlewares:
+    lan-only:
+      ipAllowList:
+        sourceRange:
+          - "${LAN_SUBNET_VALUE}"
+          - "100.64.0.0/10"
+
   routers:
     plex:
       rule: "Host(\`plex.${DOMAIN_NAME_VALUE}\`)"
@@ -119,7 +138,7 @@ http:
       tls:
         certResolver: cloudflare
       middlewares:
-        - lan-only@docker
+        - lan-only
       service: plex-svc
 
   services:
@@ -128,19 +147,52 @@ http:
         servers:
           - url: "http://${PLEX_IP}:32400"
 EOF
-  echo "Plex dynamic config written using detected IP ($PLEX_IP) and domain (${DOMAIN_NAME_VALUE})."
-  echo "Double check both are correct in $PLEX_DYNAMIC_FILE before relying on it."
+
+  echo "Plex dynamic config written."
+  echo "  Plex IP:     $PLEX_IP"
+  echo "  Domain:      plex.${DOMAIN_NAME_VALUE}"
+  echo "  LAN subnet:  $LAN_SUBNET_VALUE"
+  echo "  Tailscale:   100.64.0.0/10"
+  echo ""
+  echo "Generated file:"
+  echo "  $PLEX_DYNAMIC_FILE"
+
 else
   echo "Could not auto-detect an IP - skipping plex.yml generation."
-  echo "Create $PLEX_DYNAMIC_FILE manually, see the docker-compose.yml comment on the plex service."
+  echo "Create $PLEX_DYNAMIC_FILE manually, see the docker-compose.yml"
+  echo "comment on the plex service."
 fi
 
+# ---------------------------------------------------------------------------
+# Ensure Traefik dynamic configuration directory is readable.
+# ---------------------------------------------------------------------------
+echo "Setting permissions for Traefik dynamic configuration ..."
+
+chmod 755 "$APPDATA/traefik"
+chmod 755 "$APPDATA/traefik/dynamic"
+
+if [ -f "$PLEX_DYNAMIC_FILE" ]; then
+  chmod 644 "$PLEX_DYNAMIC_FILE"
+fi
+
+# ---------------------------------------------------------------------------
+# Hand folder ownership back to the real user.
+# ---------------------------------------------------------------------------
 echo "Handing folder ownership to $REAL_USER ..."
+
 chown -R "$REAL_USER":"$REAL_USER" "$APPDATA" "$MEDIA"
 
 echo ""
 echo "Done. Folder structure ready at $APPDATA and $MEDIA."
+echo ""
 echo "Next steps:"
 echo "  1. Edit .env - confirm SERVER_IP is correct, and set your timezone,"
 echo "     paths, and passwords."
-echo "  2. Run: docker compose up -d"
+echo "  2. Run: docker compose config"
+echo "  3. Run: docker compose up -d"
+echo ""
+echo "Plex Traefik configuration:"
+echo "  $PLEX_DYNAMIC_FILE"
+echo ""
+echo "The Plex file-provider configuration contains its own LAN +"
+echo "Tailscale IP allow-list, so it does not depend on lan-only@docker."
