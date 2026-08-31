@@ -1,0 +1,33 @@
+name: Verify Home Server
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    if: >
+      github.repository == 'eggbase-net/home-server' &&
+      !contains(github.event.head_commit.message, '[skip verify]')
+    runs-on: [self-hosted, Linux, X64, eggbase-net]
+
+    steps:
+      - name: Check runner environment
+        run: |
+          echo "==> Runner user"
+          whoami
+          echo
+          echo "==> Home server directory"
+          if [ -d "$HOME/home-server" ]; then
+            ls -la "$HOME/home-server"
+          else
+            echo "ERROR: $HOME/home-server does not exist"
+            exit 1
+          fi
+
+      - name: Run verification script
+        run: ~/home-server/scripts/verify.sh
+        env:
+          COMPOSE_PROJECT_NAME: home-server
