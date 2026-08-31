@@ -38,22 +38,16 @@
 #   6. Traefik will automatically obtain Let's Encrypt certificates via DNS-01
 #      for all configured subdomains. All services are reachable at:
 #      https://<subdomain>.${DOMAIN_NAME}
-#   7. The Traefik dashboard is available at https://traefik.${DOMAIN_NAME}
-#      (basic auth is commented out below - uncomment to enable).
+#   7. The Traefik dashboard is available at:
+#      https://traefik.${DOMAIN_NAME}
 #   8. In Pi-hole, set your router's DNS (or each device's DNS) to the
 #      server's IP so *.${DOMAIN_NAME} resolves for every device on the network.
 #   9. AutoKuma automatically creates Uptime Kuma monitors from Docker labels.
 #      It reads the kuma.* labels defined on each container. No manual setup
 #      in the Uptime Kuma UI is needed.
 #  10. Push notifications: the `uptime-kuma` service below declares a single
-#      AutoKuma-managed "ntfy" notification provider (see NOTE on that service
-#      for how it's wired). Every other service's monitor labels reference it
-#      via `notification_name_list=["ntfy-uptime"]` so a down/up event on any
-#      of them pushes a notification to your phone via ntfy. This uses
-#      AutoKuma's `notification` label type, which its own docs mark as
-#      experimental - if it doesn't behave as expected on your AutoKuma
-#      version, create the same notification manually once in the Uptime Kuma
-#      UI (Settings -> Notifications) instead; it only needs to exist once.
+#      AutoKuma-managed "ntfy" notification provider. Every other service's
+#      monitor labels reference it via notification_name_list=["ntfy-uptime"].
 # ---------------------------------------------------------------------------
 
 x-logging: &default-logging
@@ -72,36 +66,39 @@ services:
     container_name: docker-proxy-ro
     logging: *default-logging
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro   # Mount read-only
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - LOG_LEVEL=info
-      # --- Only what Traefik & AutoKuma need: list containers & networks ---
+
+      # --- Only what Traefik & AutoKuma need ---
       - CONTAINERS=1
       - NETWORKS=1
-      - EVENTS=1          # allows AutoKuma to react to container changes
-      # --- Deny everything else ---
+      - EVENTS=1
+
+      # --- Explicitly deny everything else ---
       - AUTH=0
       - SECRETS=0
       - HOST=0
+      - POST=0
       - BUILD=0
       - COMMIT=0
+      - CONFIGS=0
       - DISTRIBUTION=0
       - EXEC=0
+      - GRPC=0
       - IMAGES=0
-      - VOLUMES=0
+      - INFO=0
+      - NODES=0
+      - PING=0
+      - PLUGINS=0
       - SERVICES=0
+      - SESSION=0
       - SWARM=0
-      - CONTAINERS_CREATE=0
-      - CONTAINERS_DELETE=0
-      - CONTAINERS_START=0
-      - CONTAINERS_STOP=0
-      - CONTAINERS_RESTART=0
-      - IMAGES_CREATE=0
-      - IMAGES_DELETE=0
-      - VOLUMES_CREATE=0
-      - VOLUMES_DELETE=0
-      - NETWORKS_CREATE=0
-      - NETWORKS_DELETE=0
+      - SYSTEM=0
+      - TASKS=0
+      - VERSION=0
+      - VOLUMES=0
+
     restart: unless-stopped
     deploy:
       resources:
@@ -115,35 +112,54 @@ services:
     container_name: docker-proxy-rw
     logging: *default-logging
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro   # still read-only mount from host, but proxy allows write operations
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - LOG_LEVEL=info
-      # --- Allow all operations Portainer needs ---
-      - AUTH=0               # not needed
-      - SECRETS=0            # not needed
-      - HOST=0               # disable /host endpoint (not required)
+
+      # --- Docker API access Portainer needs ---
+      - PING=1
+      - VERSION=1
+      - INFO=1
+      - CONTAINERS=1
+      - EVENTS=1
+      - IMAGES=1
+      - NETWORKS=1
+      - VOLUMES=1
+      - SERVICES=1
+      - SWARM=1
+      - DISTRIBUTION=1
+
+      # --- Container execution / management ---
+      - EXEC=1
+
+      # --- Write operations ---
+      - POST=1
       - BUILD=1
       - COMMIT=1
-      - CONTAINERS=1
       - CONTAINERS_CREATE=1
       - CONTAINERS_DELETE=1
       - CONTAINERS_START=1
       - CONTAINERS_STOP=1
       - CONTAINERS_RESTART=1
-      - DISTRIBUTION=1
-      - EVENTS=1
-      - EXEC=1
-      - IMAGES=1
       - IMAGES_CREATE=1
       - IMAGES_DELETE=1
-      - NETWORKS=1
       - NETWORKS_CREATE=1
       - NETWORKS_DELETE=1
-      - SERVICES=1
-      - SWARM=1
-      - VOLUMES=1
       - VOLUMES_CREATE=1
       - VOLUMES_DELETE=1
+
+      # --- Explicitly disabled ---
+      - AUTH=0
+      - SECRETS=0
+      - HOST=0
+      - CONFIGS=0
+      - GRPC=0
+      - NODES=0
+      - PLUGINS=0
+      - SESSION=0
+      - SYSTEM=0
+      - TASKS=0
+
     restart: unless-stopped
     deploy:
       resources:
@@ -166,7 +182,6 @@ services:
       - traefik.http.routers.homepage.tls.certresolver=cloudflare
       - traefik.http.services.homepage.loadbalancer.server.port=80
       - traefik.http.routers.homepage.middlewares=lan-only@docker
-      # AutoKuma monitor - now uses internal Docker DNS
       - kuma.homepage.http.name=Homepage
       - kuma.homepage.http.url=http://homepage:80
       - kuma.homepage.http.notification_name_list=["ntfy-uptime"]
@@ -186,61 +201,72 @@ services:
       - --log.level=INFO
       - --api.insecure=false
       - --api.dashboard=true
+
+      # Docker provider through read-only socket proxy
       - --providers.docker=true
+      - --providers.docker.endpoint=tcp://docker-proxy-ro:2375
       - --providers.docker.exposedbydefault=false
-      # File provider: used only for services Traefik can't discover via Docker
-      # labels, e.g. Plex, which runs with network_mode: host and therefore has
-      # no reachable Docker-network IP for label-based discovery to use.
+
+      # File provider for services Docker cannot discover through labels
       - --providers.file.directory=/etc/traefik/dynamic
       - --providers.file.watch=true
+
+      # HTTP / HTTPS
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+
+      # Cloudflare DNS-01
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
       - --certificatesresolvers.cloudflare.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53
       - --certificatesresolvers.cloudflare.acme.email=${ACME_EMAIL}
       - --certificatesresolvers.cloudflare.acme.storage=/etc/traefik/acme.json
-      # Redirect all HTTP traffic to HTTPS
+
+      # Redirect HTTP to HTTPS
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
-      # Enable ping endpoint for Uptime Kuma internal monitoring
+
+      # Uptime Kuma ping endpoint
       - --ping=true
       - --ping.entrypoint=web
+
     ports:
       - "80:80"
       - "443:443"
+
     volumes:
-      # Socket mount removed – we now talk to docker-proxy-ro
       - ${APPDATA}/traefik:/etc/traefik
+
     environment:
-      # NOTE: lego (Traefik's ACME library) expects CF_DNS_API_TOKEN for a
-      # scoped Cloudflare API Token. CF_API_TOKEN is not read by the DNS-01
-      # Cloudflare provider, which is why SSL wasn't provisioning.
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
-      # Point to the read-only proxy
-      - DOCKER_HOST=tcp://docker-proxy-ro:2375
+
     labels:
       - traefik.enable=true
 
       # Shared LAN + Tailscale access whitelist
       - traefik.http.middlewares.lan-only.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
 
+      # Traefik dashboard
       - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.tls.certresolver=cloudflare
       - traefik.http.routers.traefik.service=api@internal
 
-      # Comment below to disable basic auth to the dashboard (generate hash with openssl passwd -apr1 yourpassword)
+      # Basic authentication
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
       - traefik.http.routers.traefik.middlewares=lan-only@docker,traefik-auth
-      # AutoKuma monitor - now uses internal ping endpoint
+
+      # AutoKuma monitor
       - kuma.traefik.http.name=Traefik
       - kuma.traefik.http.url=http://traefik:80/ping
       - kuma.traefik.http.accepted_statuscodes=["200"]
       - kuma.traefik.http.notification_name_list=["ntfy-uptime"]
+
     depends_on:
       - docker-proxy-ro
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
@@ -252,9 +278,15 @@ services:
     image: portainer/portainer-ce@sha256:3fa8750ac2b98ce56784ca292df1adc3ec38f0062fd572811ea4b2221beee310
     logging: *default-logging
     container_name: portainer
+
+    # Connect Portainer directly to the Docker socket proxy.
+    command:
+      - -H
+      - tcp://docker-proxy-rw:2375
+
     volumes:
-      # Socket mount removed – we now talk to docker-proxy-rw
       - ${APPDATA}/portainer:/data
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN_NAME}`)
@@ -262,28 +294,22 @@ services:
       - traefik.http.routers.portainer.tls.certresolver=cloudflare
       - traefik.http.services.portainer.loadbalancer.server.port=9000
       - traefik.http.routers.portainer.middlewares=lan-only@docker
-      # AutoKuma monitor - already internal
+
+      # AutoKuma monitor
       - kuma.portainer.http.name=Portainer
       - kuma.portainer.http.url=http://portainer:9000
       - kuma.portainer.http.notification_name_list=["ntfy-uptime"]
+
     depends_on:
       - docker-proxy-rw
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
           cpus: '0.50'
           memory: 256M
-    # ----------------------------------------------------------------------
-    # IMPORTANT – First‑time setup of Portainer:
-    #   When you open https://portainer.${DOMAIN_NAME} for the first time,
-    #   Portainer will ask you to choose how to connect to the Docker environment.
-    #   Select  "Docker"  and then  "API"  (or "Socket" depending on version).
-    #   Enter the endpoint URL:
-    #         docker-proxy-rw:2375
-    #   Leave TLS disabled (the connection is inside the Docker network).
-    #   This allows Portainer to manage the Docker daemon through the secure proxy.
-    # ----------------------------------------------------------------------
 
   # ---------------- DNS / ad-blocking ----------------
   pihole:
@@ -291,10 +317,12 @@ services:
     logging: *default-logging
     container_name: pihole
     hostname: pihole
+
     environment:
       TZ: ${TZ}
       FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
-      FTLCONF_dns_listeningMode: all # options: all, local
+      FTLCONF_dns_listeningMode: all
+
       FTLCONF_dns_hosts: |
         ${SERVER_IP} home.${DOMAIN_NAME}
         ${SERVER_IP} traefik.${DOMAIN_NAME}
@@ -308,12 +336,15 @@ services:
         ${SERVER_IP} ntfy.${DOMAIN_NAME}
         ${SERVER_IP} minecraft.${DOMAIN_NAME}
         ${SERVER_IP} status.${DOMAIN_NAME}
+
     volumes:
       - ${APPDATA}/pihole/etc-pihole:/etc/pihole
       - ${APPDATA}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+
     ports:
       - "53:53/tcp"
       - "53:53/udp"
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.pihole.rule=Host(`pihole.${DOMAIN_NAME}`)
@@ -323,10 +354,6 @@ services:
       - traefik.http.routers.pihole.middlewares=lan-only@docker
 
       # AutoKuma DNS monitor
-      # NOTE: uses a distinct id (pihole-dns) from the HTTP monitor below.
-      # AutoKuma merges any labels that share the same <id> into a single
-      # monitor definition - reusing "pihole" for both the dns and http
-      # monitors previously caused them to collide into one broken monitor.
       - kuma.pihole-dns.dns.name=Pi-hole DNS
       - kuma.pihole-dns.dns.hostname=google.com
       - kuma.pihole-dns.dns.resolver=${SERVER_IP}
@@ -334,14 +361,17 @@ services:
       - kuma.pihole-dns.dns.record_type=A
       - kuma.pihole-dns.dns.notification_name_list=["ntfy-uptime"]
 
-      # AutoKuma HTTP monitor - now uses internal address
+      # AutoKuma HTTP monitor
       - kuma.pihole-http.http.name=Pi-hole Admin
       - kuma.pihole-http.http.url=http://pihole:80/admin
       - kuma.pihole-http.http.accepted_statuscodes=["200"]
       - kuma.pihole-http.http.notification_name_list=["ntfy-uptime"]
+
     restart: unless-stopped
+
     cap_add:
       - NET_ADMIN
+
     deploy:
       resources:
         limits:
@@ -349,36 +379,35 @@ services:
           memory: 200M
 
   # ---------------- Media server ----------------
-  # Currently running:
-  #   Plex 1.43.3.10896-cb3ebc72d-ls321
   plex:
     image: lscr.io/linuxserver/plex@sha256:f6c58cb2f5e41cd1397bf2ed4e61ef63bd86e0736841b3ef426fabfe04606293
     logging: *default-logging
     container_name: plex
-    network_mode: host   # simplest for Plex discovery/DLNA; remove if you'd rather bridge+ports
+    network_mode: host
+
     environment:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
       VERSION: docker
+
     volumes:
       - ${APPDATA}/plex:/config
       - ${MEDIA}/movies:/movies
       - ${MEDIA}/tv:/tv
       - ${MEDIA}/downloads:/downloads
+
     restart: unless-stopped
+
     # devices:
-    #   - /dev/dri:/dev/dri   # uncomment for Intel Quick Sync hardware transcoding
-    # No Traefik labels here - Plex uses host networking so Docker label-based
-    # discovery can't reach it. Routing + cert for plex.${DOMAIN_NAME} is defined
-    # manually via Traefik's file provider, see:
-    #   ${APPDATA}/traefik/dynamic/plex.yml
-    # But AutoKuma can still monitor it - using host IP.
+    #   - /dev/dri:/dev/dri
+
     labels:
       - kuma.plex.http.name=Plex
       - kuma.plex.http.url=http://${SERVER_IP}:32400
-      - kuma.plex.http.accepted_statuscodes=["200","302","401"]   # Plex may redirect
+      - kuma.plex.http.accepted_statuscodes=["200","302","401"]
       - kuma.plex.http.notification_name_list=["ntfy-uptime"]
+
     deploy:
       resources:
         limits:
@@ -386,24 +415,26 @@ services:
           memory: 2G
 
   # ---------------- Torrent client ----------------
-  # Currently running:
-  #   qBittorrent 5.2.3_v2.0.14-ls472
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent@sha256:212b86dff59e3962b4082b5ef20a577e76c8f8527d2ab505cfa887b4bcecb0b0
     logging: *default-logging
     container_name: qbittorrent
+
     environment:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
       WEBUI_PORT: 8080
+
     volumes:
       - ${APPDATA}/qbittorrent:/config
       - ${MEDIA}/downloads:/downloads
       - ${MEDIA}/other:/other
+
     ports:
       - "6881:6881"
       - "6881:6881/udp"
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.qbittorrent.rule=Host(`torrent.${DOMAIN_NAME}`)
@@ -412,29 +443,33 @@ services:
       - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
       - traefik.http.routers.qbittorrent.middlewares=lan-only@docker
 
-      # AutoKuma monitor - already internal
       - kuma.torrent.http.name=qBittorrent
       - kuma.torrent.http.url=http://qbittorrent:8080
       - kuma.torrent.http.notification_name_list=["ntfy-uptime"]
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
           cpus: '1.00'
           memory: 1G
 
-  # ---------------- PDF toolkit (merge, split, OCR, convert, compress, etc.) ----------------
+  # ---------------- PDF toolkit ----------------
   stirlingpdf:
     image: stirlingtools/stirling-pdf@sha256:3b3670fce70b396ec56ba380a3cc7858e0abf83fe13f31c88f7737847763a396
     logging: *default-logging
     container_name: stirlingpdf
+
     environment:
       TZ: ${TZ}
-      DOCKER_ENABLE_SECURITY: "false"   # set true and configure login if exposing beyond LAN
+      DOCKER_ENABLE_SECURITY: "false"
+
     volumes:
-      - ${APPDATA}/stirlingpdf/trainingData:/usr/share/tessdata   # OCR language data
+      - ${APPDATA}/stirlingpdf/trainingData:/usr/share/tessdata
       - ${APPDATA}/stirlingpdf/config:/configs
       - ${APPDATA}/stirlingpdf/logs:/logs
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.stirlingpdf.rule=Host(`pdf.${DOMAIN_NAME}`)
@@ -442,11 +477,13 @@ services:
       - traefik.http.routers.stirlingpdf.tls.certresolver=cloudflare
       - traefik.http.services.stirlingpdf.loadbalancer.server.port=8080
       - traefik.http.routers.stirlingpdf.middlewares=lan-only@docker
-      # AutoKuma monitor - already internal
+
       - kuma.pdf.http.name=Stirling PDF
       - kuma.pdf.http.url=http://stirlingpdf:8080
       - kuma.pdf.http.notification_name_list=["ntfy-uptime"]
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
@@ -454,20 +491,21 @@ services:
           memory: 2G
 
   # ---------------- Ebook library & web reader ----------------
-  # Calibre-Web NextGen
-  # Pinned to exact image digest.
   calibreweb:
     image: ghcr.io/new-usemame/calibre-web-nextgen@sha256:9ac36a23138e2c84fa48bd9f9e13c8ce1128f53764408ac57e15226628545f87
     logging: *default-logging
     container_name: calibreweb
+
     environment:
       PUID: ${PUID}
       PGID: ${PGID}
       TZ: ${TZ}
+
     volumes:
       - ${APPDATA}/calibreweb:/config
       - ${MEDIA}/books:/calibre-library
       - ${MEDIA}/calibreweb-ingest:/cwa-book-ingest
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.calibreweb.rule=Host(`books.${DOMAIN_NAME}`)
@@ -475,36 +513,41 @@ services:
       - traefik.http.routers.calibreweb.tls.certresolver=cloudflare
       - traefik.http.services.calibreweb.loadbalancer.server.port=8083
       - traefik.http.routers.calibreweb.middlewares=lan-only@docker
-      # AutoKuma monitor - now uses internal address
+
       - kuma.books.http.name=Calibre-Web
       - kuma.books.http.url=http://calibreweb:8083
       - kuma.books.http.notification_name_list=["ntfy-uptime"]
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
           cpus: '0.75'
           memory: 512M
 
-  # ---------------- Push notifications (send alerts from scripts/containers to your phone) ----------------
+  # ---------------- Push notifications ----------------
   ntfy:
     image: binwiederhier/ntfy@sha256:f2419f405127afa868f10985c1a41449e673477cee1eb19994339a5ae8b592e7
     logging: *default-logging
     container_name: ntfy
+
     command:
       - serve
+
     environment:
       TZ: ${TZ}
-      NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}/   # used in notification links; update if you proxy over HTTPS instead
+      NTFY_BASE_URL: https://ntfy.${DOMAIN_NAME}
       NTFY_BEHIND_PROXY: true
       NTFY_ENABLE_LOGIN: "false"
-      # NTFY_ACCESS_CONTROL_ALLOW_ORIGIN: "*"
       NTFY_VISITOR_REQUEST_LIMIT_BURST: "300"
       NTFY_VISITOR_REQUEST_LIMIT_REPLENISH: "1s"
       NTFY_VISITOR_SUBSCRIPTION_LIMIT: "200"
+
     volumes:
       - ${APPDATA}/ntfy/cache:/var/cache/ntfy
       - ${APPDATA}/ntfy/etc:/etc/ntfy
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.ntfy.rule=Host(`ntfy.${DOMAIN_NAME}`)
@@ -515,42 +558,33 @@ services:
       # Restrict access to LAN + Tailscale
       - traefik.http.routers.ntfy.middlewares=lan-only@docker,ntfy-cors
 
-      # CORS: reflect the Origin header back only when it's the bare domain
-      # or any subdomain of it (e.g. home.${DOMAIN_NAME}, dashboard.${DOMAIN_NAME}).
-      # Covers current and future embeds without ever needing to edit this
-      # again when you add another subdomain.
-      # NOTE: no NTFY_ACCESS_CONTROL_ALLOW_ORIGIN here on purpose - CORS is
-      # handled entirely by the Traefik middleware below instead, so ntfy
-      # doesn't emit its own Access-Control-Allow-Origin header. Having both
-      # ntfy and Traefik set that header results in duplicate values, which
-      # browsers reject as invalid CORS.
+      # CORS
       - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowOriginListRegex=^https://([a-zA-Z0-9-]+\.)?${DOMAIN_NAME}$$
       - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowMethods=GET,POST,PUT,DELETE,OPTIONS
       - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
       - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
       - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
 
-      # AutoKuma monitor - now uses internal address
-      # NOTE: this only monitors ntfy's own uptime. It intentionally does NOT
-      # get notification_name_list, since if ntfy itself is down it can't be
-      # the one to tell you that.
+      # AutoKuma monitor
       - kuma.ntfy.http.name=ntfy
       - kuma.ntfy.http.url=http://ntfy:80
+
     restart: unless-stopped
+
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1"]
       interval: 60s
       timeout: 10s
       retries: 3
       start_period: 40s
+
     deploy:
       resources:
         limits:
           cpus: '0.25'
           memory: 128M
 
-  # ---------------- Indexer manager (disabled - uncomment to enable automation) ----------------
-  # If you enable this, also add "${SERVER_IP} prowlarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
+  # ---------------- Indexer manager (disabled) ----------------
   # prowlarr:
   #   image: lscr.io/linuxserver/prowlarr:latest
   #   container_name: prowlarr
@@ -567,16 +601,9 @@ services:
   #     - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
   #     - traefik.http.services.prowlarr.loadbalancer.server.port=9696
   #     - traefik.http.routers.prowlarr.middlewares=lan-only@docker
-  #     # AutoKuma monitor (commented out, but you could add it later)
   #   restart: unless-stopped
-  #   # deploy:
-  #   #   resources:
-  #   #     limits:
-  #   #       cpus: '0.50'
-  #   #       memory: 384M
 
-  # ---------------- TV automation (disabled - uncomment to enable automation) ----------------
-  # If you enable this, also add "${SERVER_IP} sonarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
+  # ---------------- TV automation (disabled) ----------------
   # sonarr:
   #   image: lscr.io/linuxserver/sonarr:latest
   #   container_name: sonarr
@@ -596,14 +623,8 @@ services:
   #     - traefik.http.services.sonarr.loadbalancer.server.port=8989
   #     - traefik.http.routers.sonarr.middlewares=lan-only@docker
   #   restart: unless-stopped
-  #   # deploy:
-  #   #   resources:
-  #   #     limits:
-  #   #       cpus: '0.50'
-  #   #       memory: 384M
 
-  # ---------------- Movie automation (disabled - uncomment to enable automation) ----------------
-  # If you enable this, also add "${SERVER_IP} radarr.${DOMAIN_NAME}" to FTLCONF_dns_hosts above.
+  # ---------------- Movie automation (disabled) ----------------
   # radarr:
   #   image: lscr.io/linuxserver/radarr:latest
   #   container_name: radarr
@@ -623,21 +644,19 @@ services:
   #     - traefik.http.services.radarr.loadbalancer.server.port=7878
   #     - traefik.http.routers.radarr.middlewares=lan-only@docker
   #   restart: unless-stopped
-  #   # deploy:
-  #   #   resources:
-  #   #     limits:
-  #   #       cpus: '0.50'
-  #   #       memory: 384M
 
-  # ---------------- Network file share (browse & clean up media over LAN) ----------------
+  # ---------------- Network file share ----------------
   samba:
     image: ghcr.io/servercontainers/samba@sha256:57859789bd3425e6e929269fa13b16251cc8b8f939e4362ed7100aaf41a17122
     logging: *default-logging
     container_name: samba
+
     volumes:
       - ${MEDIA}:/media
+
     ports:
       - "445:445"
+
     environment:
       TZ: ${TZ}
       UID_homeserver: ${PUID}
@@ -649,7 +668,9 @@ services:
         guest ok = no
         read only = no
         browseable = yes
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
@@ -662,18 +683,22 @@ services:
     logging: *default-logging
     container_name: tailscale
     hostname: home-server
+
     environment:
-      TS_AUTHKEY: ${TS_AUTHKEY}          # generate at https://login.tailscale.com/admin/settings/keys
+      TS_AUTHKEY: ${TS_AUTHKEY}
       TS_STATE_DIR: /var/lib/tailscale
       TS_EXTRA_ARGS: --advertise-routes=${LAN_SUBNET} --accept-dns=false
-      # add --advertise-exit-node too if you also want to route ALL internet traffic through home
+
     volumes:
       - ${APPDATA}/tailscale:/var/lib/tailscale
       - /dev/net/tun:/dev/net/tun
+
     cap_add:
       - NET_ADMIN
       - NET_RAW
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
@@ -682,12 +707,13 @@ services:
 
   # ---------------- Uptime Kuma (Status of all the services) ----------------
   uptime-kuma:
-  # Version 2 latest digest
     image: louislam/uptime-kuma@sha256:3e24e96c89efff0e3a4b0698cbdd36c15ad3022371db57166e5588853002ee5c
     logging: *default-logging
     container_name: uptime-kuma
+
     volumes:
       - ${APPDATA}/uptime-kuma:/app/data
+
     labels:
       - traefik.enable=true
       - traefik.http.routers.kuma.rule=Host(`status.${DOMAIN_NAME}`)
@@ -695,15 +721,18 @@ services:
       - traefik.http.routers.kuma.tls.certresolver=cloudflare
       - traefik.http.services.kuma.loadbalancer.server.port=3001
       - traefik.http.routers.kuma.middlewares=lan-only@docker
-      # AutoKuma monitor for itself - now uses internal address
+
+      # AutoKuma monitor for itself
       - kuma.kuma.http.name=Uptime Kuma
       - kuma.kuma.http.url=http://uptime-kuma:3001
 
-      # AutoKuma-managed ntfy notification provider.
+      # AutoKuma-managed ntfy notification provider
       - kuma.ntfy-uptime.notification.name=ntfy
       - kuma.ntfy-uptime.notification.active=true
       - kuma.ntfy-uptime.notification.config={"type":"ntfy","ntfyserverurl":"https://ntfy.${DOMAIN_NAME}","ntfytopic":"${NTFY_UPTIME_KUMA_TOPIC}","ntfyPriority":5,"ntfyAuthenticationMethod":"none"}
+
     restart: unless-stopped
+
     deploy:
       resources:
         limits:
@@ -715,20 +744,24 @@ services:
     image: ghcr.io/bigboot/autokuma@sha256:8acbd3ad3ec8cb6c066aa0ee541154921283ec78159015937128541921c47974
     logging: *default-logging
     container_name: autokuma
+
     restart: unless-stopped
+
     depends_on:
       uptime-kuma:
         condition: service_started
       docker-proxy-ro:
         condition: service_started
+
     environment:
       AUTOKUMA__KUMA__URL: http://uptime-kuma:3001
       AUTOKUMA__KUMA__USERNAME: ${KUMA_USERNAME}
       AUTOKUMA__KUMA__PASSWORD: ${KUMA_PASSWORD}
-      # Point to the read‑only proxy
       DOCKER_HOST: tcp://docker-proxy-ro:2375
+
     volumes:
       - ${APPDATA}/autokuma:/data
+
     deploy:
       resources:
         limits:
