@@ -80,9 +80,10 @@ services:
       - traefik.http.routers.homepage.entrypoints=websecure
       - traefik.http.routers.homepage.tls.certresolver=cloudflare
       - traefik.http.services.homepage.loadbalancer.server.port=80
-      # AutoKuma monitor
+      - traefik.http.routers.homepage.middlewares=lan-only@docker
+      # AutoKuma monitor - now uses internal Docker DNS
       - kuma.homepage.http.name=Homepage
-      - kuma.homepage.http.url=https://home.${DOMAIN_NAME}
+      - kuma.homepage.http.url=http://homepage:80
       - kuma.homepage.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
     deploy:
@@ -117,6 +118,9 @@ services:
       # Redirect all HTTP traffic to HTTPS
       - --entrypoints.web.http.redirections.entrypoint.to=websecure
       - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      # Enable ping endpoint for Uptime Kuma internal monitoring
+      - --ping=true
+      - --ping.entrypoint=web
     ports:
       - "80:80"
       - "443:443"
@@ -130,17 +134,22 @@ services:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
     labels:
       - traefik.enable=true
+
+      # Shared LAN + Tailscale access whitelist
+      - traefik.http.middlewares.lan-only.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
+
       - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)
       - traefik.http.routers.traefik.entrypoints=websecure
       - traefik.http.routers.traefik.tls.certresolver=cloudflare
       - traefik.http.routers.traefik.service=api@internal
+
       # Comment below to disable basic auth to the dashboard (generate hash with openssl passwd -apr1 yourpassword)
       - traefik.http.middlewares.traefik-auth.basicauth.users=${TRAEFIK_USER}:${TRAEFIK_PASSWORD_HASH}
-      - traefik.http.routers.traefik.middlewares=traefik-auth
-      # AutoKuma monitor
+      - traefik.http.routers.traefik.middlewares=lan-only@docker,traefik-auth
+      # AutoKuma monitor - now uses internal ping endpoint
       - kuma.traefik.http.name=Traefik
-      - kuma.traefik.http.url=https://traefik.${DOMAIN_NAME}
-      - kuma.traefik.http.accepted_statuscodes=["200","401"]   # basic auth returns 401
+      - kuma.traefik.http.url=http://traefik:80/ping
+      - kuma.traefik.http.accepted_statuscodes=["200"]
       - kuma.traefik.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
     deploy:
@@ -163,12 +172,9 @@ services:
       - traefik.http.routers.portainer.entrypoints=websecure
       - traefik.http.routers.portainer.tls.certresolver=cloudflare
       - traefik.http.services.portainer.loadbalancer.server.port=9000
-      # Restrict access to LAN + Tailscale only (100.64.0.0/10 = Tailscale's CGNAT range)
-      - traefik.http.middlewares.portainer-whitelist.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
-      - traefik.http.routers.portainer.middlewares=portainer-whitelist
-      # AutoKuma monitor
+      - traefik.http.routers.portainer.middlewares=lan-only@docker
+      # AutoKuma monitor - already internal
       - kuma.portainer.http.name=Portainer
-      # - kuma.portainer.http.url=https://portainer.${DOMAIN_NAME}
       - kuma.portainer.http.url=http://portainer:9000
       - kuma.portainer.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
@@ -213,6 +219,7 @@ services:
       - traefik.http.routers.pihole.entrypoints=websecure
       - traefik.http.routers.pihole.tls.certresolver=cloudflare
       - traefik.http.services.pihole.loadbalancer.server.port=80
+      - traefik.http.routers.pihole.middlewares=lan-only@docker
 
       # AutoKuma DNS monitor
       # NOTE: uses a distinct id (pihole-dns) from the HTTP monitor below.
@@ -226,9 +233,9 @@ services:
       - kuma.pihole-dns.dns.record_type=A
       - kuma.pihole-dns.dns.notification_name_list=["ntfy-uptime"]
 
-      # AutoKuma HTTP monitor
+      # AutoKuma HTTP monitor - now uses internal address
       - kuma.pihole-http.http.name=Pi-hole Admin
-      - kuma.pihole-http.http.url=https://pihole.${DOMAIN_NAME}/admin
+      - kuma.pihole-http.http.url=http://pihole:80/admin
       - kuma.pihole-http.http.accepted_statuscodes=["200"]
       - kuma.pihole-http.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
@@ -265,10 +272,10 @@ services:
     # discovery can't reach it. Routing + cert for plex.${DOMAIN_NAME} is defined
     # manually via Traefik's file provider, see:
     #   ${APPDATA}/traefik/dynamic/plex.yml
-    # But AutoKuma can still monitor it:
+    # But AutoKuma can still monitor it - using host IP.
     labels:
       - kuma.plex.http.name=Plex
-      - kuma.plex.http.url=https://plex.${DOMAIN_NAME}
+      - kuma.plex.http.url=http://${SERVER_IP}:32400
       - kuma.plex.http.accepted_statuscodes=["200","302","401"]   # Plex may redirect
       - kuma.plex.http.notification_name_list=["ntfy-uptime"]
     deploy:
@@ -302,19 +309,10 @@ services:
       - traefik.http.routers.qbittorrent.entrypoints=websecure
       - traefik.http.routers.qbittorrent.tls.certresolver=cloudflare
       - traefik.http.services.qbittorrent.loadbalancer.server.port=8080
-      # Restrict access to LAN + Tailscale only (100.64.0.0/10 = Tailscale's CGNAT range)
-      - traefik.http.middlewares.qbittorrent-whitelist.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
-      - traefik.http.routers.qbittorrent.middlewares=qbittorrent-whitelist
+      - traefik.http.routers.qbittorrent.middlewares=lan-only@docker
 
-      # Add trailing slash ONLY if missing (root path)
-      # - traefik.http.middlewares.add-slash.redirectregex.regex=^(https?://torrent\.[^/]+)$
-      # - traefik.http.middlewares.add-slash.redirectregex.replacement=$${1}/
-      # - traefik.http.middlewares.add-slash.redirectregex.permanent=false
-      # - traefik.http.routers.qbittorrent.middlewares=add-slash
-
-      # AutoKuma monitor
+      # AutoKuma monitor - already internal
       - kuma.torrent.http.name=qBittorrent
-      # - kuma.torrent.http.url=https://torrent.${DOMAIN_NAME}
       - kuma.torrent.http.url=http://qbittorrent:8080
       - kuma.torrent.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
@@ -342,12 +340,9 @@ services:
       - traefik.http.routers.stirlingpdf.entrypoints=websecure
       - traefik.http.routers.stirlingpdf.tls.certresolver=cloudflare
       - traefik.http.services.stirlingpdf.loadbalancer.server.port=8080
-      # Restrict access to LAN + Tailscale only (100.64.0.0/10 = Tailscale's CGNAT range)
-      - traefik.http.middlewares.stirlingpdf-whitelist.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
-      - traefik.http.routers.stirlingpdf.middlewares=stirlingpdf-whitelist
-      # AutoKuma monitor
+      - traefik.http.routers.stirlingpdf.middlewares=lan-only@docker
+      # AutoKuma monitor - already internal
       - kuma.pdf.http.name=Stirling PDF
-      # - kuma.pdf.http.url=https://pdf.${DOMAIN_NAME}
       - kuma.pdf.http.url=http://stirlingpdf:8080
       - kuma.pdf.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
@@ -378,9 +373,10 @@ services:
       - traefik.http.routers.calibreweb.entrypoints=websecure
       - traefik.http.routers.calibreweb.tls.certresolver=cloudflare
       - traefik.http.services.calibreweb.loadbalancer.server.port=8083
-      # AutoKuma monitor
+      - traefik.http.routers.calibreweb.middlewares=lan-only@docker
+      # AutoKuma monitor - now uses internal address
       - kuma.books.http.name=Calibre-Web
-      - kuma.books.http.url=https://books.${DOMAIN_NAME}
+      - kuma.books.http.url=http://calibreweb:8083
       - kuma.books.http.notification_name_list=["ntfy-uptime"]
     restart: unless-stopped
     deploy:
@@ -415,6 +411,9 @@ services:
       - traefik.http.routers.ntfy.tls.certresolver=cloudflare
       - traefik.http.services.ntfy.loadbalancer.server.port=80
 
+      # Restrict access to LAN + Tailscale
+      - traefik.http.routers.ntfy.middlewares=lan-only@docker,ntfy-cors
+
       # CORS: reflect the Origin header back only when it's the bare domain
       # or any subdomain of it (e.g. home.${DOMAIN_NAME}, dashboard.${DOMAIN_NAME}).
       # Covers current and future embeds without ever needing to edit this
@@ -429,14 +428,13 @@ services:
       - traefik.http.middlewares.ntfy-cors.headers.accessControlAllowHeaders=*
       - traefik.http.middlewares.ntfy-cors.headers.accessControlMaxAge=86400
       - traefik.http.middlewares.ntfy-cors.headers.addVaryHeader=true
-      - traefik.http.routers.ntfy.middlewares=ntfy-cors
 
-      # AutoKuma monitor
+      # AutoKuma monitor - now uses internal address
       # NOTE: this only monitors ntfy's own uptime. It intentionally does NOT
       # get notification_name_list, since if ntfy itself is down it can't be
       # the one to tell you that.
       - kuma.ntfy.http.name=ntfy
-      - kuma.ntfy.http.url=https://ntfy.${DOMAIN_NAME}
+      - kuma.ntfy.http.url=http://ntfy:80
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -q --tries=1 http://localhost:80/v1/health -O - | grep -Eo '\"healthy\"\\s*:\\s*true' || exit 1"]
@@ -467,6 +465,7 @@ services:
   #     - traefik.http.routers.prowlarr.entrypoints=websecure
   #     - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
   #     - traefik.http.services.prowlarr.loadbalancer.server.port=9696
+  #     - traefik.http.routers.prowlarr.middlewares=lan-only@docker
   #     # AutoKuma monitor (commented out, but you could add it later)
   #   restart: unless-stopped
   #   # deploy:
@@ -494,6 +493,7 @@ services:
   #     - traefik.http.routers.sonarr.entrypoints=websecure
   #     - traefik.http.routers.sonarr.tls.certresolver=cloudflare
   #     - traefik.http.services.sonarr.loadbalancer.server.port=8989
+  #     - traefik.http.routers.sonarr.middlewares=lan-only@docker
   #   restart: unless-stopped
   #   # deploy:
   #   #   resources:
@@ -520,6 +520,7 @@ services:
   #     - traefik.http.routers.radarr.entrypoints=websecure
   #     - traefik.http.routers.radarr.tls.certresolver=cloudflare
   #     - traefik.http.services.radarr.loadbalancer.server.port=7878
+  #     - traefik.http.routers.radarr.middlewares=lan-only@docker
   #   restart: unless-stopped
   #   # deploy:
   #   #   resources:
@@ -592,9 +593,10 @@ services:
       - traefik.http.routers.kuma.entrypoints=websecure
       - traefik.http.routers.kuma.tls.certresolver=cloudflare
       - traefik.http.services.kuma.loadbalancer.server.port=3001
-      # AutoKuma monitor for itself (optional, but can be useful)
+      - traefik.http.routers.kuma.middlewares=lan-only@docker
+      # AutoKuma monitor for itself - now uses internal address
       - kuma.kuma.http.name=Uptime Kuma
-      - kuma.kuma.http.url=https://status.${DOMAIN_NAME}
+      - kuma.kuma.http.url=http://uptime-kuma:3001
 
       # AutoKuma-managed ntfy notification provider.
       - kuma.ntfy-uptime.notification.name=ntfy

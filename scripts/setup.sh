@@ -118,6 +118,8 @@ http:
         - websecure
       tls:
         certResolver: cloudflare
+      middlewares:
+        - lan-only@docker
       service: plex-svc
 
   services:
