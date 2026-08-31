@@ -613,6 +613,9 @@ services:
     logging: *default-logging
     container_name: autokuma
     restart: unless-stopped
+    depends_on:
+      uptime-kuma:
+        condition: service_started
     environment:
       AUTOKUMA__KUMA__URL: http://uptime-kuma:3001
       AUTOKUMA__KUMA__USERNAME: ${KUMA_USERNAME}
