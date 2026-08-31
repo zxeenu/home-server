@@ -1,16 +1,17 @@
 name: Verify Home Server
 
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Deploy Home Server"]   # must match the deploy workflow name
+    types:
+      - completed
+  workflow_dispatch:   # allow manual runs too
 
 jobs:
   verify:
     if: >
-      github.repository == 'eggbase-net/home-server' &&
-      !contains(github.event.head_commit.message, '[skip verify]')
+      github.event.workflow_run.conclusion == 'success' &&
+      github.repository == 'eggbase-net/home-server'
     runs-on: [self-hosted, Linux, X64, eggbase-net]
 
     steps:
@@ -19,6 +20,12 @@ jobs:
           echo "==> Runner user"
           whoami
           echo
+          echo "==> HOME"
+          echo "$HOME"
+          echo
+          echo "==> Current working directory"
+          pwd
+          echo
           echo "==> Home server directory"
           if [ -d "$HOME/home-server" ]; then
             ls -la "$HOME/home-server"
@@ -26,8 +33,21 @@ jobs:
             echo "ERROR: $HOME/home-server does not exist"
             exit 1
           fi
+          echo
+          echo "==> Verify script"
+          if [ -f "$HOME/home-server/scripts/verify.sh" ]; then
+            ls -l "$HOME/home-server/scripts/verify.sh"
+          else
+            echo "ERROR: verify.sh does not exist"
+            exit 1
+          fi
 
       - name: Run verification script
         run: ~/home-server/scripts/verify.sh
-        env:
-          COMPOSE_PROJECT_NAME: home-server
+
+      - name: Show logs if verification failed
+        if: failure()
+        run: |
+          echo "==> Docker compose logs (last 50 lines) =="
+          cd ~/home-server
+          docker compose logs --tail=50
