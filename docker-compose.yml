@@ -204,7 +204,6 @@ services:
 
       # Docker provider through read-only socket proxy
       - --providers.docker=true
-      - --providers.docker.endpoint=tcp://docker-proxy-ro:2375
       - --providers.docker.exposedbydefault=false
 
       # File provider for services Docker cannot discover through labels
@@ -239,6 +238,7 @@ services:
 
     environment:
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      - DOCKER_HOST=tcp://docker-proxy-ro:2375
 
     labels:
       - traefik.enable=true
