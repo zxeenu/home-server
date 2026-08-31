@@ -244,7 +244,7 @@ services:
       - traefik.enable=true
 
       # Shared LAN + Tailscale access whitelist
-      - traefik.http.middlewares.lan-only.ipwhitelist.sourcerange=${LAN_SUBNET},100.64.0.0/10
+      - traefik.http.middlewares.lan-only.ipallowlist.sourcerange=${LAN_SUBNET},100.64.0.0/10
 
       # Traefik dashboard
       - traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN_NAME}`)
