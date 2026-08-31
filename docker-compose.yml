@@ -255,8 +255,6 @@ services:
     volumes:
       # Socket mount removed – we now talk to docker-proxy-rw
       - ${APPDATA}/portainer:/data
-    environment:
-      # - DOCKER_HOST=tcp://docker-proxy-rw:2375 # Point Portainer to the full-access proxy
     labels:
       - traefik.enable=true
       - traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN_NAME}`)
