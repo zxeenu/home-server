@@ -104,7 +104,7 @@ services:
       resources:
         limits:
           cpus: '0.10'
-          memory: 64M
+          memory: 128M
 
   # ---------------- Secure Docker socket proxy (FULL ACCESS) for Portainer ----------------
   docker-proxy-rw:
