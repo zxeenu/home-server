@@ -257,7 +257,7 @@ services:
       - ${APPDATA}/portainer:/data
     environment:
       # Point Portainer to the full-access proxy
-      - DOCKER_HOST=tcp://docker-proxy-rw:2375
+      # - DOCKER_HOST=tcp://docker-proxy-rw:2375
     labels:
       - traefik.enable=true
       - traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN_NAME}`)
@@ -283,7 +283,7 @@ services:
     #   Portainer will ask you to choose how to connect to the Docker environment.
     #   Select  "Docker"  and then  "API"  (or "Socket" depending on version).
     #   Enter the endpoint URL:
-    #         tcp://docker-proxy-rw:2375
+    #         docker-proxy-rw:2375
     #   Leave TLS disabled (the connection is inside the Docker network).
     #   This allows Portainer to manage the Docker daemon through the secure proxy.
     # ----------------------------------------------------------------------
