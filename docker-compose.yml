@@ -66,6 +66,91 @@ name: home-server
 
 services:
 
+  # ---------------- Secure Docker socket proxy (READ-ONLY) for Traefik & AutoKuma ----------------
+  docker-proxy-ro:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-proxy-ro
+    logging: *default-logging
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # Mount read-only
+    environment:
+      - LOG_LEVEL=info
+      # --- Only what Traefik & AutoKuma need: list containers & networks ---
+      - CONTAINERS=1
+      - NETWORKS=1
+      - EVENTS=1          # allows AutoKuma to react to container changes
+      # --- Deny everything else ---
+      - AUTH=0
+      - SECRETS=0
+      - HOST=0
+      - BUILD=0
+      - COMMIT=0
+      - DISTRIBUTION=0
+      - EXEC=0
+      - IMAGES=0
+      - VOLUMES=0
+      - SERVICES=0
+      - SWARM=0
+      - CONTAINERS_CREATE=0
+      - CONTAINERS_DELETE=0
+      - CONTAINERS_START=0
+      - CONTAINERS_STOP=0
+      - CONTAINERS_RESTART=0
+      - IMAGES_CREATE=0
+      - IMAGES_DELETE=0
+      - VOLUMES_CREATE=0
+      - VOLUMES_DELETE=0
+      - NETWORKS_CREATE=0
+      - NETWORKS_DELETE=0
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 64M
+
+  # ---------------- Secure Docker socket proxy (FULL ACCESS) for Portainer ----------------
+  docker-proxy-rw:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-proxy-rw
+    logging: *default-logging
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # still read-only mount from host, but proxy allows write operations
+    environment:
+      - LOG_LEVEL=info
+      # --- Allow all operations Portainer needs ---
+      - AUTH=0               # not needed
+      - SECRETS=0            # not needed
+      - HOST=0               # disable /host endpoint (not required)
+      - BUILD=1
+      - COMMIT=1
+      - CONTAINERS=1
+      - CONTAINERS_CREATE=1
+      - CONTAINERS_DELETE=1
+      - CONTAINERS_START=1
+      - CONTAINERS_STOP=1
+      - CONTAINERS_RESTART=1
+      - DISTRIBUTION=1
+      - EVENTS=1
+      - EXEC=1
+      - IMAGES=1
+      - IMAGES_CREATE=1
+      - IMAGES_DELETE=1
+      - NETWORKS=1
+      - NETWORKS_CREATE=1
+      - NETWORKS_DELETE=1
+      - SERVICES=1
+      - SWARM=1
+      - VOLUMES=1
+      - VOLUMES_CREATE=1
+      - VOLUMES_DELETE=1
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 128M
+
   # ---------------- Home dashboard (static landing page linking to all services) ----------------
   homepage:
     image: nginx:alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
@@ -125,13 +210,15 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Socket mount removed – we now talk to docker-proxy-ro
       - ${APPDATA}/traefik:/etc/traefik
     environment:
       # NOTE: lego (Traefik's ACME library) expects CF_DNS_API_TOKEN for a
       # scoped Cloudflare API Token. CF_API_TOKEN is not read by the DNS-01
       # Cloudflare provider, which is why SSL wasn't provisioning.
       - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      # Point to the read-only proxy
+      - DOCKER_HOST=tcp://docker-proxy-ro:2375
     labels:
       - traefik.enable=true
 
@@ -151,6 +238,8 @@ services:
       - kuma.traefik.http.url=http://traefik:80/ping
       - kuma.traefik.http.accepted_statuscodes=["200"]
       - kuma.traefik.http.notification_name_list=["ntfy-uptime"]
+    depends_on:
+      - docker-proxy-ro
     restart: unless-stopped
     deploy:
       resources:
@@ -164,8 +253,11 @@ services:
     logging: *default-logging
     container_name: portainer
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Socket mount removed – we now talk to docker-proxy-rw
       - ${APPDATA}/portainer:/data
+    environment:
+      # Point Portainer to the full-access proxy
+      - DOCKER_HOST=tcp://docker-proxy-rw:2375
     labels:
       - traefik.enable=true
       - traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN_NAME}`)
@@ -177,12 +269,24 @@ services:
       - kuma.portainer.http.name=Portainer
       - kuma.portainer.http.url=http://portainer:9000
       - kuma.portainer.http.notification_name_list=["ntfy-uptime"]
+    depends_on:
+      - docker-proxy-rw
     restart: unless-stopped
     deploy:
       resources:
         limits:
           cpus: '0.50'
           memory: 256M
+    # ----------------------------------------------------------------------
+    # IMPORTANT – First‑time setup of Portainer:
+    #   When you open https://portainer.${DOMAIN_NAME} for the first time,
+    #   Portainer will ask you to choose how to connect to the Docker environment.
+    #   Select  "Docker"  and then  "API"  (or "Socket" depending on version).
+    #   Enter the endpoint URL:
+    #         tcp://docker-proxy-rw:2375
+    #   Leave TLS disabled (the connection is inside the Docker network).
+    #   This allows Portainer to manage the Docker daemon through the secure proxy.
+    # ----------------------------------------------------------------------
 
   # ---------------- DNS / ad-blocking ----------------
   pihole:
@@ -618,14 +722,16 @@ services:
     depends_on:
       uptime-kuma:
         condition: service_started
+      docker-proxy-ro:
+        condition: service_started
     environment:
       AUTOKUMA__KUMA__URL: http://uptime-kuma:3001
       AUTOKUMA__KUMA__USERNAME: ${KUMA_USERNAME}
       AUTOKUMA__KUMA__PASSWORD: ${KUMA_PASSWORD}
+      # Point to the read‑only proxy
+      DOCKER_HOST: tcp://docker-proxy-ro:2375
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ${APPDATA}/autokuma:/data
-    # No labels needed – AutoKuma ignores itself by default
     deploy:
       resources:
         limits:
