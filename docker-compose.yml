@@ -687,7 +687,8 @@ services:
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_STATE_DIR: /var/lib/tailscale
-      TS_EXTRA_ARGS: --advertise-routes=${LAN_SUBNET} --accept-dns=false
+      # TS_EXTRA_ARGS: --advertise-routes=${LAN_SUBNET} --accept-dns=false
+      TS_EXTRA_ARGS: --advertise-routes=${LAN_SUBNET} --accept-dns=false --snat-subnet-routes=false
 
     volumes:
       - ${APPDATA}/tailscale:/var/lib/tailscale
