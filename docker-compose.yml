@@ -684,6 +684,7 @@ services:
     container_name: tailscale
     hostname: home-server
 
+    network_mode: host
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY}
       TS_STATE_DIR: /var/lib/tailscale
