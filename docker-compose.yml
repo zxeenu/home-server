@@ -214,6 +214,9 @@ services:
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
 
+      # Reject aliased HTTP headers to prevent header spoofing
+      - --entrypoints.websecure.http.aliasheadersstrategy=reject
+
       # Cloudflare DNS-01
       - --certificatesresolvers.cloudflare.acme.dnschallenge=true
       - --certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare
