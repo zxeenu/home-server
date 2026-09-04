@@ -50,6 +50,7 @@ home-server/
 
 The main Compose project contains:
 
+* Docker socket proxies (read-only and read-write)
 * Homepage
 * Traefik
 * Portainer
@@ -135,6 +136,19 @@ docker inspect --format '{{index .RepoDigests 0}}' lscr.io/linuxserver/plex:late
 
 ---
 
+# Docker Socket Security
+
+Nothing in the stack talks to `/var/run/docker.sock` directly. Instead, two `tecnativa/docker-socket-proxy` instances sit in front of it, each exposing only the subset of the Docker API a given consumer actually needs:
+
+* **`docker-proxy-ro`** — read-only. Exposes just `CONTAINERS`, `NETWORKS`, `EVENTS`, `INFO`, and `VERSION`. Used by **Traefik** (service discovery) and **AutoKuma** (reading container labels/state). Everything else — including `POST`, `EXEC`, `SECRETS`, and `SYSTEM` — is explicitly denied.
+* **`docker-proxy-rw`** — full access. Exposes container/image/network/volume lifecycle operations and `EXEC`. Used only by **Portainer**, since it needs to create, start, stop, and remove containers on your behalf.
+
+Both proxies themselves only mount the Docker socket read-only (`/var/run/docker.sock:ro`) and are resource-capped (0.10–0.20 CPU, 128M memory each).
+
+This means the only container with genuine write access to Docker is Portainer, and even that access is mediated through an explicit allow-list rather than a raw socket mount.
+
+---
+
 # Reverse Proxy and HTTPS
 
 ## Traefik
@@ -145,7 +159,7 @@ It handles:
 
 * HTTP → HTTPS redirection
 * HTTPS termination
-* Docker service discovery
+* Docker service discovery (via `docker-proxy-ro`, not a direct socket mount)
 * Routing based on hostnames
 * Let's Encrypt certificates
 * Cloudflare DNS-01 challenges
@@ -404,7 +418,7 @@ This creates a deliberate separation between **publicly documented infrastructur
 
 The public repository can therefore remain open as a technical reference and portfolio for the project, while the private repository acts as the trusted deployment control plane.
 
-This is done simply by having 2 origins on the local working copy. Hence when changes are pushed, they go to both repositories. 
+This is done simply by having 2 origins on the local working copy. Hence when changes are pushed, they go to both repositories.
 
 ---
 
@@ -418,7 +432,7 @@ The self-hosted runner runs directly on the home server and is assigned a dedica
 eggbase-net
 ```
 
-You are able to skip the deploy action workflow from being processed by puttin the following keywords in the commit message:
+You are able to skip the deploy action workflow from being processed by putting the following keywords in the commit message:
 
 ```text
 skip deploy
@@ -520,22 +534,24 @@ If a workflow remains queued, verify:
 
 # Services
 
-| Service          | Purpose                      | Address                            |
-| ---------------- | ---------------------------- | ---------------------------------- |
-| **Homepage**     | Static dashboard             | `https://home.${DOMAIN_NAME}`      |
-| **Traefik**      | Reverse proxy + HTTPS        | `https://traefik.${DOMAIN_NAME}`   |
-| **Portainer**    | Docker management            | `https://portainer.${DOMAIN_NAME}` |
-| **Pi-hole**      | DNS + ad blocking            | `https://pihole.${DOMAIN_NAME}`    |
-| **Plex**         | Media streaming              | `https://plex.${DOMAIN_NAME}`      |
-| **qBittorrent**  | Torrent client               | `https://torrent.${DOMAIN_NAME}`   |
-| **Stirling PDF** | PDF manipulation/OCR         | `https://pdf.${DOMAIN_NAME}`       |
-| **Calibre-Web**  | Ebook library/reader         | `https://books.${DOMAIN_NAME}`     |
-| **ntfy**         | Push notifications           | `https://ntfy.${DOMAIN_NAME}`      |
-| **Samba**        | LAN file sharing             | `\\<server-ip>\media`              |
-| **Tailscale**    | Remote network access        | Tailnet                            |
-| **Uptime Kuma**  | Monitoring                   | `https://status.${DOMAIN_NAME}`    |
-| **AutoKuma**     | Automatic monitor management | Internal                           |
-| **Minecraft**    | Java + Bedrock server        | `25565` / `19132/udp`              |
+| Service              | Purpose                            | Address                            |
+| -------------------- | ----------------------------------- | ----------------------------------- |
+| **docker-proxy-ro**  | Read-only Docker API for Traefik/AutoKuma | Internal only                |
+| **docker-proxy-rw**  | Full Docker API for Portainer      | Internal only                       |
+| **Homepage**         | Static dashboard                   | `https://home.${DOMAIN_NAME}`       |
+| **Traefik**          | Reverse proxy + HTTPS              | `https://traefik.${DOMAIN_NAME}`    |
+| **Portainer**        | Docker management                  | `https://portainer.${DOMAIN_NAME}`  |
+| **Pi-hole**          | DNS + ad blocking                  | `https://pihole.${DOMAIN_NAME}`     |
+| **Plex**             | Media streaming                    | `https://plex.${DOMAIN_NAME}`       |
+| **qBittorrent**      | Torrent client                     | `https://torrent.${DOMAIN_NAME}`    |
+| **Stirling PDF**     | PDF manipulation/OCR               | `https://pdf.${DOMAIN_NAME}`        |
+| **Calibre-Web**      | Ebook library/reader               | `https://books.${DOMAIN_NAME}`      |
+| **ntfy**             | Push notifications                 | `https://ntfy.${DOMAIN_NAME}`       |
+| **Samba**            | LAN file sharing                   | `\\<server-ip>\media`               |
+| **Tailscale**        | Remote network access              | Tailnet                             |
+| **Uptime Kuma**      | Monitoring                         | `https://status.${DOMAIN_NAME}`     |
+| **AutoKuma**         | Automatic monitor management       | Internal                            |
+| **Minecraft**        | Java + Bedrock server              | `25565` / `19132/udp`               |
 
 ---
 
@@ -570,20 +586,22 @@ This prevents a single workload from consuming all available resources on the se
 
 For example:
 
-| Service      | CPU limit | Memory limit |
-| ------------ | --------: | -----------: |
-| Homepage     |      0.25 |          64M |
-| Traefik      |      0.50 |         256M |
-| Portainer    |      0.50 |         256M |
-| Pi-hole      |      0.50 |         200M |
-| Plex         |      1.50 |           2G |
-| qBittorrent  |      1.00 |           1G |
-| Stirling PDF |      0.75 |           2G |
-| Calibre-Web  |      0.75 |         512M |
-| ntfy         |      0.25 |         128M |
-| Tailscale    |      0.25 |         128M |
-| Uptime Kuma  |      0.75 |         384M |
-| AutoKuma     |      0.50 |         256M |
+| Service         | CPU limit | Memory limit |
+| ---------------- | --------: | -----------: |
+| docker-proxy-ro  |      0.10 |          128M |
+| docker-proxy-rw  |      0.20 |          128M |
+| Homepage         |      0.25 |           64M |
+| Traefik          |      0.50 |          256M |
+| Portainer        |      0.50 |          256M |
+| Pi-hole          |      0.50 |          200M |
+| Plex             |      1.50 |            2G |
+| qBittorrent      |      1.00 |            1G |
+| Stirling PDF     |      0.75 |            2G |
+| Calibre-Web      |      0.75 |          512M |
+| ntfy             |      0.25 |          128M |
+| Tailscale        |      0.25 |          128M |
+| Uptime Kuma      |      0.75 |          384M |
+| AutoKuma         |      0.50 |          256M |
 
 Stirling PDF receives a relatively large memory allocation because it runs several heavyweight document-processing components, including Java, LibreOffice, OCR tooling, ImageMagick, Ghostscript, and Calibre.
 
@@ -633,6 +651,8 @@ The default directory layout is:
 Application configuration is kept separate from media.
 
 This makes it possible to back up configuration without necessarily backing up large media collections.
+
+Note: the docker socket proxies (`docker-proxy-ro`, `docker-proxy-rw`) hold no state of their own — they only mount `/var/run/docker.sock` read-only — so they have no corresponding `appdata` directory.
 
 ---
 
@@ -701,8 +721,11 @@ TZ=Indian/Maldives
 PUID=1000
 PGID=1000
 
+APPDATA=/srv/appdata
+MEDIA=/srv/media
+LAN_SUBNET=192.168.1.0/24
+
 PIHOLE_PASSWORD=...
-SMB_USER=media
 SMB_PASSWORD=...
 
 TS_AUTHKEY=...
@@ -879,7 +902,7 @@ The deployment uses a pinned image digest to keep the running version reproducib
 
 # Samba
 
-The media directory is exposed over SMB.
+The media directory is exposed over SMB. The Samba user is fixed to `homeserver` (set via the `UID_homeserver` / `ACCOUNT_homeserver` environment variables in Compose); only its password is configurable through `.env` (`SMB_PASSWORD`).
 
 Windows:
 
@@ -891,7 +914,7 @@ Linux:
 
 ```bash
 mount -t cifs //<server-ip>/media /mnt/media \
-  -o username=<SMB_USER>,password=<SMB_PASSWORD>
+  -o username=homeserver,password=<SMB_PASSWORD>
 ```
 
 Samba is intended primarily for LAN access.
@@ -922,6 +945,8 @@ Remote device
 
 Tailscale provides the remote network path, while Traefik provides consistent HTTPS routing.
 
+The Docker socket itself is never mounted directly into an application container. All Docker API access goes through the read-only or read-write `docker-socket-proxy` instances described in [Docker Socket Security](#docker-socket-security), so no container other than Portainer can create, modify, or delete other containers.
+
 ---
 
 ## Disable UPnP
@@ -942,6 +967,8 @@ No UPnP
 Tailscale for remote access
 +
 Traefik for internal HTTPS
++
+No direct Docker socket exposure
 ```
 
 ---
@@ -1069,4 +1096,4 @@ The private operational repository is used for trusted automated deployment thro
 
 ---
 
-**How was this generated:** CHAT GPT, blame him.
+**How was this generated:** CHAT GPT, blame him
