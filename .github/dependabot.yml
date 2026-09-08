@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/"                  # scan docker-compose.yml at repo root
+    schedule:
+      interval: "weekly"            # run weekly
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "dependabot"
+    commit-message:
+      prefix: "chore(deps)"
+    allow:
+      - dependency-type: "direct"
+
+  - package-ecosystem: "docker"
+    directory: "/subsetup/minecraft"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "dependabot"
+
+  - package-ecosystem: "docker"
+    directory: "/subsetup/minecraft-tailscale"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "dependabot"
