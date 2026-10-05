@@ -29,6 +29,17 @@
     "useHttps": true,
     "path": "/?hello=bob_is_my_name"
   },
+    {
+    "name": "Prowlarr",
+    "description": "Indexer manager and torrent search",
+    "note": "{{NOTE_PROWLARR}}",
+    "domain": "prowlarr.{{DOMAIN_NAME}}",
+    "ip": "{{SERVER_IP}}",
+    "port": 9696,
+    "useHttps": true,
+    "path": ""
+  },
+
   {
     "name": "Pi-hole",
     "description": "Network-wide DNS and ad blocking",

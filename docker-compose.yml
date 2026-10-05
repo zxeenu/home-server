@@ -2,10 +2,11 @@
 # HOME SERVER STACK
 # Services: Homepage (static dashboard of links), Traefik (reverse proxy with
 #           automatic HTTPS via Cloudflare DNS-01), Portainer (docker mgmt UI),
-#           Pi-hole (DNS + ad-block), Plex, qBittorrent, Stirling PDF (PDF toolkit),
+#           Pi-hole (DNS + ad-block), Plex, qBittorrent, Prowlarr (indexer
+#           manager / search backend for Doorr), Stirling PDF (PDF toolkit),
 #           Calibre-Web (ebook library/reader), ntfy (push notifications),
-#           Samba (network file browsing)
-#           Sonarr / Radarr / Prowlarr are included but commented out below -
+#           Samba (network file browsing), Tailscale, Uptime Kuma + AutoKuma
+#           Sonarr / Radarr are included but commented out below -
 #           uncomment them later if you want automated TV/movie fetching.
 #
 # IMAGE PINNING:
@@ -20,7 +21,7 @@
 #
 # BEFORE YOU START:
 #   1. Create the folder structure on your host, e.g.:
-#        /srv/appdata/{traefik,portainer,pihole,plex,qbittorrent,stirlingpdf,calibreweb,ntfy}
+#        /srv/appdata/{traefik,portainer,pihole,plex,qbittorrent,prowlarr,stirlingpdf,calibreweb,ntfy}
 #        /srv/media/{movies,tv,downloads,books}
 #   2. Keep index.html in the SAME folder as this docker-compose.yml
 #      (the homepage service mounts it directly from there - no copying needed).
@@ -48,6 +49,10 @@
 #  10. Push notifications: the `uptime-kuma` service below declares a single
 #      AutoKuma-managed "ntfy" notification provider. Every other service's
 #      monitor labels reference it via notification_name_list=["ntfy-uptime"].
+#  11. Prowlarr: open https://prowlarr.${DOMAIN_NAME}, set up authentication,
+#      add indexers, and copy the API key (Settings -> General) into Doorr.
+#      Optional: add qBittorrent under Settings -> Download Clients
+#      (host: qbittorrent, port: 8080).
 # ---------------------------------------------------------------------------
 
 x-logging: &default-logging
@@ -334,6 +339,7 @@ services:
         ${SERVER_IP} pihole.${DOMAIN_NAME}
         ${SERVER_IP} plex.${DOMAIN_NAME}
         ${SERVER_IP} torrent.${DOMAIN_NAME}
+        ${SERVER_IP} prowlarr.${DOMAIN_NAME}
         ${SERVER_IP} files.${DOMAIN_NAME}
         ${SERVER_IP} pdf.${DOMAIN_NAME}
         ${SERVER_IP} books.${DOMAIN_NAME}
@@ -458,6 +464,41 @@ services:
         limits:
           cpus: '1.00'
           memory: 1G
+
+  # ---------------- Indexer manager (search backend for Doorr) ----------------
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr@sha256:f2b26429893d4c4cb71941b7ee50b1bdecd9d5f9f9e02d5410615e9f4f7c8d95
+    logging: *default-logging
+    container_name: prowlarr
+
+    environment:
+      PUID: ${PUID}
+      PGID: ${PGID}
+      TZ: ${TZ}
+
+    volumes:
+      - ${APPDATA}/prowlarr:/config
+
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.prowlarr.rule=Host(`prowlarr.${DOMAIN_NAME}`)
+      - traefik.http.routers.prowlarr.entrypoints=websecure
+      - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
+      - traefik.http.services.prowlarr.loadbalancer.server.port=9696
+      - traefik.http.routers.prowlarr.middlewares=lan-only@docker
+
+      # AutoKuma monitor
+      - kuma.prowlarr.http.name=Prowlarr
+      - kuma.prowlarr.http.url=http://prowlarr:9696/ping
+      - kuma.prowlarr.http.notification_name_list=["ntfy-uptime"]
+
+    restart: unless-stopped
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
 
   # ---------------- PDF toolkit ----------------
   stirlingpdf:
@@ -587,25 +628,6 @@ services:
         limits:
           cpus: '0.25'
           memory: 128M
-
-  # ---------------- Indexer manager (disabled) ----------------
-  # prowlarr:
-  #   image: lscr.io/linuxserver/prowlarr:latest
-  #   container_name: prowlarr
-  #   environment:
-  #     PUID: ${PUID}
-  #     PGID: ${PGID}
-  #     TZ: ${TZ}
-  #   volumes:
-  #     - ${APPDATA}/prowlarr:/config
-  #   labels:
-  #     - traefik.enable=true
-  #     - traefik.http.routers.prowlarr.rule=Host(`prowlarr.${DOMAIN_NAME}`)
-  #     - traefik.http.routers.prowlarr.entrypoints=websecure
-  #     - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
-  #     - traefik.http.services.prowlarr.loadbalancer.server.port=9696
-  #     - traefik.http.routers.prowlarr.middlewares=lan-only@docker
-  #   restart: unless-stopped
 
   # ---------------- TV automation (disabled) ----------------
   # sonarr:
