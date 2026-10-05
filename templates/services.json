@@ -29,7 +29,7 @@
     "useHttps": true,
     "path": "/?hello=bob_is_my_name"
   },
-    {
+  {
     "name": "Prowlarr",
     "description": "Indexer manager and torrent search",
     "note": "{{NOTE_PROWLARR}}",
@@ -39,7 +39,6 @@
     "useHttps": true,
     "path": ""
   },
-
   {
     "name": "Pi-hole",
     "description": "Network-wide DNS and ad blocking",
