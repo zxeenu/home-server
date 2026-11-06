@@ -465,40 +465,40 @@ services:
           cpus: '1.00'
           memory: 1G
 
-  # ---------------- Indexer manager (search backend for Doorr) ----------------
-  prowlarr:
-    image: lscr.io/linuxserver/prowlarr@sha256:f2b26429893d4c4cb71941b7ee50b1bdecd9d5f9f9e02d5410615e9f4f7c8d95
-    logging: *default-logging
-    container_name: prowlarr
+  # # ---------------- Indexer manager (search backend for Doorr) ----------------
+  # prowlarr:
+  #   image: lscr.io/linuxserver/prowlarr@sha256:f2b26429893d4c4cb71941b7ee50b1bdecd9d5f9f9e02d5410615e9f4f7c8d95
+  #   logging: *default-logging
+  #   container_name: prowlarr
 
-    environment:
-      PUID: ${PUID}
-      PGID: ${PGID}
-      TZ: ${TZ}
+  #   environment:
+  #     PUID: ${PUID}
+  #     PGID: ${PGID}
+  #     TZ: ${TZ}
 
-    volumes:
-      - ${APPDATA}/prowlarr:/config
+  #   volumes:
+  #     - ${APPDATA}/prowlarr:/config
 
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.prowlarr.rule=Host(`prowlarr.${DOMAIN_NAME}`)
-      - traefik.http.routers.prowlarr.entrypoints=websecure
-      - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
-      - traefik.http.services.prowlarr.loadbalancer.server.port=9696
-      - traefik.http.routers.prowlarr.middlewares=lan-only@docker
+  #   labels:
+  #     - traefik.enable=true
+  #     - traefik.http.routers.prowlarr.rule=Host(`prowlarr.${DOMAIN_NAME}`)
+  #     - traefik.http.routers.prowlarr.entrypoints=websecure
+  #     - traefik.http.routers.prowlarr.tls.certresolver=cloudflare
+  #     - traefik.http.services.prowlarr.loadbalancer.server.port=9696
+  #     - traefik.http.routers.prowlarr.middlewares=lan-only@docker
 
-      # AutoKuma monitor
-      - kuma.prowlarr.http.name=Prowlarr
-      - kuma.prowlarr.http.url=http://prowlarr:9696/ping
-      - kuma.prowlarr.http.notification_name_list=["ntfy-uptime"]
+  #     # AutoKuma monitor
+  #     - kuma.prowlarr.http.name=Prowlarr
+  #     - kuma.prowlarr.http.url=http://prowlarr:9696/ping
+  #     - kuma.prowlarr.http.notification_name_list=["ntfy-uptime"]
 
-    restart: unless-stopped
+  #   restart: unless-stopped
 
-    deploy:
-      resources:
-        limits:
-          cpus: '0.50'
-          memory: 512M
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.50'
+  #         memory: 512M
 
   # ---------------- PDF toolkit ----------------
   stirlingpdf:
